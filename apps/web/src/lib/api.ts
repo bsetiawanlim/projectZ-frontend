@@ -27,7 +27,12 @@ export const apiClient = createApiClient({
   baseUrl: API_BASE_URL,
   withCredentials: true, // Use Better Auth session cookies
   onUnauthorized: () => {
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    if (
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/login") &&
+      !window.location.pathname.startsWith("/order") &&
+      !window.location.pathname.startsWith("/table-order")
+    ) {
       window.location.href = "/login";
     }
   },

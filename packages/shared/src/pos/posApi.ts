@@ -1,4 +1,4 @@
-﻿import type { ApiClient } from "../api/client";
+import type { ApiClient } from "../api/client";
 import type { ApiSuccess, Paginated } from "../api/types";
 import type { z } from "zod";
 import type {
@@ -15,10 +15,20 @@ import type {
     SalesPaymentRecord,
     DailySalesSummaryResult,
     ProductSalesItemReport,
+    CreateTableOrderInput,
+    TableMenuResponse,
 } from "./schemas";
 
 export function createPosApi(client: ApiClient) {
     return {
+        // ── Table Order (Public / Barcode Table Self-Ordering) ────────────────
+        async getTableMenu(facilityId?: number): Promise<ApiSuccess<TableMenuResponse>> {
+            return client.get<TableMenuResponse>("/api/pos/table-order/menu", facilityId ? { facilityId } : undefined);
+        },
+        async createTableOrder(input: CreateTableOrderInput): Promise<ApiSuccess<SalesOrderRecord>> {
+            return client.post<SalesOrderRecord>("/api/pos/table-order/create", input);
+        },
+
         // ── Sales Orders ──────────────────────────────────────────────────────
         async createSalesOrder(input: z.infer<typeof createSalesOrderSchema>): Promise<ApiSuccess<SalesOrderRecord>> {
             return client.post<SalesOrderRecord>("/api/pos/sales-order/create", input);

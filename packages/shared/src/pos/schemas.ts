@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 export const salesOrderStatusEnum = z.enum(["DRAFT", "COMPLETED", "VOID", "REFUNDED"]);
 export type SalesOrderStatus = z.infer<typeof salesOrderStatusEnum>;
@@ -22,6 +22,8 @@ export const nestedSalesOrderItemSchema = z.object({
 // ── Sales Order ───────────────────────────────────────────────────────────────
 export const createSalesOrderSchema = z.object({
     customerId: z.number().int().positive().optional().nullable(),
+    facilityId: z.number().int().positive().optional().nullable(),
+    tableNumber: z.string().max(50).optional().nullable(),
     orderDate: z.string().datetime().optional().nullable(),
     currency: z.string().length(3).optional().default("IDR"),
     includeDiscount: z.boolean().optional().default(false),
@@ -35,6 +37,8 @@ export const createSalesOrderSchema = z.object({
 export const updateSalesOrderSchema = z.object({
     id: z.number().int().positive(),
     customerId: z.number().int().positive().optional().nullable(),
+    facilityId: z.number().int().positive().optional().nullable(),
+    tableNumber: z.string().max(50).optional().nullable(),
     orderDate: z.string().datetime().optional().nullable(),
     currency: z.string().length(3).optional(),
     includeDiscount: z.boolean().optional(),
@@ -53,6 +57,7 @@ export const salesOrderQuerySchema = z.object({
     status: salesOrderStatusEnum.optional(),
     customerId: z.coerce.number().int().positive().optional(),
     facilityId: z.coerce.number().int().positive().optional().nullable(),
+    tableNumber: z.string().optional().nullable(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
 });
@@ -70,6 +75,56 @@ export const productSalesReportSchema = z.object({
     facilityId: z.coerce.number().int().positive().optional().nullable(),
     limit: z.coerce.number().int().min(1).max(100).default(10).optional(),
 });
+
+// ── Table Order (Barcode / QR Code Table Self-Ordering) ──────────────────────
+export const createTableOrderSchema = z.object({
+    facilityId: z.number().int().positive("Facility id must be greater than 0"),
+    tableNumber: z.string().min(1, "Table number is required").max(50),
+    customerName: z.string().max(100).optional().nullable(),
+    customerPhone: z.string().max(30).optional().nullable(),
+    notes: z.string().optional().nullable(),
+    items: z.array(nestedSalesOrderItemSchema).min(1, "At least one item is required in the order"),
+});
+export type CreateTableOrderInput = z.infer<typeof createTableOrderSchema>;
+
+export const getTableMenuSchema = z.object({
+    facilityId: z.coerce.number().int().positive().optional().nullable(),
+});
+
+export interface TableMenuItem {
+    id: number;
+    name: string;
+    sku?: string | null;
+    barcode?: string | null;
+    description?: string | null;
+    price: number;
+    categoryId: number;
+    categoryName: string;
+    unitId?: number | null;
+    unitLabel?: string | null;
+    imageUrl?: string | null;
+}
+
+export interface TableMenuCategory {
+    id: number;
+    name: string;
+    description?: string | null;
+}
+
+export interface TableMenuFacility {
+    id: number;
+    facilityCode: string;
+    facilityName: string;
+    type?: string | null;
+    address?: string | null;
+    phoneNumber?: string | null;
+}
+
+export interface TableMenuResponse {
+    facility?: TableMenuFacility | null;
+    categories: TableMenuCategory[];
+    products: TableMenuItem[];
+}
 
 // ── Sales Order Item ──────────────────────────────────────────────────────────
 export const createSalesOrderItemSchema = z.object({
@@ -146,6 +201,7 @@ export interface SalesOrderRecord {
     customerId?: number | null;
     facilityId?: number | null;
     facility?: { id: number; facilityCode: string; facilityName: string; type?: string } | null;
+    tableNumber?: string | null;
     orderDate: string;
     subtotal: number;
     includeDiscount: boolean;

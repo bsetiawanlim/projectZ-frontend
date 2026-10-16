@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { productApi } from "@/lib/api";
 import { AddProductModal } from "@/components/products/AddProductModal";
+import { TableQrModal } from "./TableQrModal";
 import { useAuth } from "@/lib/authContext";
 import { cartStore, formatIDR, type ProductItem, type ProductCategoryItem } from "@pz/shared";
 
@@ -18,6 +19,7 @@ export function ProductPicker() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [isTableQrOpen, setIsTableQrOpen] = useState(false);
   const [activeFacilityId, setActiveFacilityId] = useState<number | null>(cartStore.getState().facilityId);
 
   const canCreateProduct = Boolean(
@@ -118,6 +120,16 @@ export function ProductPicker() {
               + New Product
             </Button>
           )}
+          <Button
+            id="pos-table-qr-btn"
+            variant="secondary"
+            size="md"
+            onClick={() => setIsTableQrOpen(true)}
+            style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+            title="Generate & print table QR codes"
+          >
+            🪑 Table QRs
+          </Button>
         </div>
 
         {/* Categories Bar */}
@@ -367,6 +379,11 @@ export function ProductPicker() {
           loadData();
           handleAddProduct(newProd);
         }}
+      />
+
+      <TableQrModal
+        isOpen={isTableQrOpen}
+        onClose={() => setIsTableQrOpen(false)}
       />
     </div>
   );

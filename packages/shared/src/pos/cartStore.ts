@@ -1,4 +1,4 @@
-﻿import { createStore } from "zustand/vanilla";
+import { createStore } from "zustand/vanilla";
 import { calculateItemTotals, calculateOrderTotals } from "./calculation";
 
 export interface CartItem {
@@ -23,6 +23,7 @@ export interface CartTotals {
 export interface CartState {
     customerId: number | null;
     facilityId: number | null;
+    tableNumber: string | null;
     currency: string;
     includeDiscount: boolean;
     discountPercentage: number;
@@ -42,6 +43,7 @@ export interface CartState {
     removeItem: (productId: number) => void;
     setCustomer: (customerId: number | null) => void;
     setFacility: (facilityId: number | null) => void;
+    setTableNumber: (tableNumber: string | null) => void;
     setOrderDiscount: (include: boolean, percentage?: number) => void;
     setOrderTax: (include: boolean, percentage?: number) => void;
     setNotes: (notes: string | null) => void;
@@ -49,6 +51,7 @@ export interface CartState {
     toCreateOrderPayload: () => {
         customerId?: number | null;
         facilityId?: number | null;
+        tableNumber?: string | null;
         currency: string;
         includeDiscount: boolean;
         discountPercentage: number;
@@ -92,7 +95,8 @@ function computeTotals(
 export const createCartStore = () =>
     createStore<CartState>((set, get) => ({
         customerId: null,
-    facilityId: null,
+        facilityId: null,
+        tableNumber: null,
         currency: "IDR",
         includeDiscount: false,
         discountPercentage: 0,
@@ -217,6 +221,7 @@ export const createCartStore = () =>
 
         setCustomer: (customerId) => set({ customerId }),
         setFacility: (facilityId) => set({ facilityId }),
+        setTableNumber: (tableNumber) => set({ tableNumber }),
 
         setOrderDiscount: (include, percentage = 0) => {
             set((state) => {
@@ -247,8 +252,9 @@ export const createCartStore = () =>
         setNotes: (notes) => set({ notes }),
 
         clearCart: () =>
-            set({
+            set((state) => ({
                 customerId: null,
+                tableNumber: null,
                 includeDiscount: false,
                 discountPercentage: 0,
                 includeTax: false,
@@ -256,13 +262,14 @@ export const createCartStore = () =>
                 notes: null,
                 items: [],
                 totals: { subtotal: 0, discountAmount: 0, taxAmount: 0, grandTotal: 0 },
-            }),
+            })),
 
         toCreateOrderPayload: () => {
             const state = get();
             return {
                 customerId: state.customerId,
                 facilityId: state.facilityId,
+                tableNumber: state.tableNumber,
                 currency: state.currency,
                 includeDiscount: state.includeDiscount,
                 discountPercentage: state.discountPercentage,

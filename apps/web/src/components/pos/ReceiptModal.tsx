@@ -55,11 +55,17 @@ export function ReceiptModal({ isOpen, order, payments, changeAmount, onClose }:
             </p>
           </div>
 
-          {/* Customer & Status */}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "0.75rem", color: "#4b5563" }}>
+          {/* Customer, Facility & Table */}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "0.35rem", color: "#4b5563" }}>
             <span>Customer:</span>
             <span style={{ fontWeight: 600 }}>{order.customerId ? `Customer #${order.customerId}` : "Walk-in Customer"}</span>
           </div>
+          {(order.tableNumber || order.facility) && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "0.75rem", color: "#4b5563" }}>
+              <span>{order.facility ? order.facility.facilityName : "Outlet"}</span>
+              {order.tableNumber && <span style={{ fontWeight: 700, color: "#4f46e5" }}>Table: {order.tableNumber}</span>}
+            </div>
+          )}
 
           {/* Item Lines */}
           <div style={{ borderBottom: "1px dashed #d1d5db", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>

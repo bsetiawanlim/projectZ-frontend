@@ -89,37 +89,56 @@ export function CartPanel({ onProceedToPayment }: CartPanelProps) {
           </Button>
         </div>
 
-        {/* POS Outlet / Facility Select */}
-        <div>
-          <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
-            POS Outlet / Location:
-          </label>
-          <select
-            id="pos-facility-select"
-            value={cartState.facilityId ?? ""}
-            onChange={(e) => {
-              const val = e.target.value ? Number(e.target.value) : null;
-              cartStore.getState().setFacility(val);
-            }}
-            style={{
-              width: "100%",
-              marginTop: "0.25rem",
-              padding: "0.5rem 0.75rem",
-              backgroundColor: "var(--bg-surface)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: "var(--radius-md)",
-              fontSize: "0.875rem",
-              outline: "none",
-            }}
-          >
-            <option value="">-- Select Store / Facility --</option>
-            {facilities.map((fac) => (
-              <option key={fac.id} value={fac.id}>
-                🏪 {fac.facilityName} ({fac.facilityCode})
-              </option>
-            ))}
-          </select>
+        {/* POS Outlet / Facility & Table Number */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "0.5rem" }}>
+          <div>
+            <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+              POS Outlet:
+            </label>
+            <select
+              id="pos-facility-select"
+              value={cartState.facilityId ?? ""}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : null;
+                cartStore.getState().setFacility(val);
+              }}
+              style={{
+                width: "100%",
+                marginTop: "0.25rem",
+                padding: "0.5rem 0.5rem",
+                backgroundColor: "var(--bg-surface)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--radius-md)",
+                fontSize: "0.85rem",
+                outline: "none",
+              }}
+            >
+              <option value="">-- Facility --</option>
+              {facilities.map((fac) => (
+                <option key={fac.id} value={fac.id}>
+                  🏪 {fac.facilityName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+              Table / Room:
+            </label>
+            <Input
+              id="pos-table-number-input"
+              type="text"
+              placeholder="e.g. T-04"
+              value={cartState.tableNumber ?? ""}
+              onChange={(e) => cartStore.getState().setTableNumber(e.target.value || null)}
+              style={{
+                marginTop: "0.25rem",
+                padding: "0.45rem 0.6rem",
+                fontSize: "0.85rem",
+              }}
+            />
+          </div>
         </div>
 
         {/* Customer Select */}

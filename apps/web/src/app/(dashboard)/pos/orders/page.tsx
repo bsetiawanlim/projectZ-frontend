@@ -14,12 +14,13 @@ export default function PosOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<SalesOrderStatus | "ALL">("ALL");
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>("ALL");
+  const [tableSearch, setTableSearch] = useState<string>("");
   const [facilities, setFacilities] = useState<FacilityRecord[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrderRecord | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  type PosOrderSortField = "orderNumber" | "date" | "outlet" | "customer" | "total" | "status";
+  type PosOrderSortField = "orderNumber" | "date" | "outlet" | "table" | "customer" | "total" | "status";
   const [sortField, setSortField] = useState<PosOrderSortField>("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -46,6 +47,10 @@ export default function PosOrdersPage() {
         const outA = a.facility?.facilityName || "";
         const outB = b.facility?.facilityName || "";
         cmp = outA.localeCompare(outB);
+      } else if (sortField === "table") {
+        const tabA = a.tableNumber || "";
+        const tabB = b.tableNumber || "";
+        cmp = tabA.localeCompare(tabB);
       } else if (sortField === "customer") {
         const custA = (a as any).customer?.profile ? `${(a as any).customer.profile.firstName} ${(a as any).customer.profile.lastName || ""}` : (a.customerId ? `Customer #${a.customerId}` : "Walk-in");
         const custB = (b as any).customer?.profile ? `${(b as any).customer.profile.firstName} ${(b as any).customer.profile.lastName || ""}` : (b.customerId ? `Customer #${b.customerId}` : "Walk-in");
@@ -66,6 +71,7 @@ export default function PosOrdersPage() {
       const res = await posApi.listSalesOrders({
         status: selectedStatus === "ALL" ? undefined : selectedStatus,
         facilityId: selectedFacilityId !== "ALL" ? Number(selectedFacilityId) : undefined,
+        tableNumber: tableSearch.trim() ? tableSearch.trim() : undefined,
         limit: 50,
       });
       const items = Array.isArray(res?.items) ? res.items : Array.isArray((res as any)?.data) ? (res as any).data : [];
@@ -76,7 +82,7 @@ export default function PosOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedStatus, selectedFacilityId]);
+  }, [selectedStatus, selectedFacilityId, tableSearch]);
 
   useEffect(() => {
     loadOrders();
@@ -161,6 +167,29 @@ export default function PosOrdersPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Table Search */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Table:</span>
+            <input
+              id="filter-order-table-input"
+              type="text"
+              placeholder="e.g. T-1"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              style={{
+                height: "32px",
+                width: "90px",
+                fontSize: "0.8rem",
+                padding: "0 0.5rem",
+                borderRadius: "var(--radius-sm)",
+                backgroundColor: "var(--bg-surface-elevated)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+            />
           </div>
 
           {/* Filter Pills */}
@@ -248,6 +277,15 @@ export default function PosOrdersPage() {
                 </th>
                 <th
                   style={{ cursor: "pointer" }}
+                  onClick={() => handleSort("table")}
+                  title="Sort by Table"
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                    TABLE {sortField === "table" ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}
+                  </span>
+                </th>
+                <th
+                  style={{ cursor: "pointer" }}
                   onClick={() => handleSort("customer")}
                   title="Sort by Customer"
                 >
@@ -300,6 +338,27 @@ export default function PosOrdersPage() {
                         {o.facility?.facilityName || "Main Outlet"}
                       </span>
                     </div>
+                  </td>
+                  <td>
+                    {o.tableNumber ? (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.25rem",
+                          padding: "0.15rem 0.5rem",
+                          backgroundColor: "rgba(99, 102, 241, 0.12)",
+                          color: "var(--primary)",
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                        }}
+                      >
+                        🪑 {o.tableNumber}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>
+                    )}
                   </td>
                   <td>{o.customerId ? `Customer #${o.customerId}` : "Walk-in"}</td>
                   <td style={{ fontWeight: 700, color: "var(--accent-emerald)" }}>
@@ -365,6 +424,9 @@ export default function PosOrdersPage() {
                 <div>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>STATUS</span>
                   <div><Badge variant={selectedOrder.status === "COMPLETED" ? "success" : "default"}>{selectedOrder.status}</Badge></div>
+                </div>
+                <div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>TABLE: {selectedOrder.tableNumber ? `🪑 ${selectedOrder.tableNumber}` : "—"} | OUTLET: {selectedOrder.facility?.facilityName || "Main Outlet"}</span>
                 </div>
                 <div>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>CUSTOMER</span>
