@@ -20,6 +20,12 @@ import type {
     GetTableOrderStatusInput,
     TableOrderStatusResponse,
     TableMenuResponse,
+    MidtransSnapTokenInput,
+    MidtransChargeInput,
+    MidtransConfigResponse,
+    MidtransSnapTokenResult,
+    MidtransChargeResult,
+    MidtransStatusResult,
 } from "./schemas";
 
 export function createPosApi(client: ApiClient) {
@@ -103,6 +109,23 @@ export function createPosApi(client: ApiClient) {
         },
         async listPayments(salesOrderId: number): Promise<ApiSuccess<SalesPaymentRecord[]>> {
             return client.post<SalesPaymentRecord[]>("/api/pos/sales-payment/list", { salesOrderId });
+        },
+
+        // ── Midtrans Payment Gateway ──────────────────────────────────────────
+        async getMidtransConfig(): Promise<ApiSuccess<MidtransConfigResponse>> {
+            return client.get<MidtransConfigResponse>("/api/pos/midtrans/config");
+        },
+        async createMidtransSnapToken(input: MidtransSnapTokenInput): Promise<ApiSuccess<MidtransSnapTokenResult>> {
+            return client.post<MidtransSnapTokenResult>("/api/pos/midtrans/snap-token", input);
+        },
+        async createMidtransCharge(input: MidtransChargeInput): Promise<ApiSuccess<MidtransChargeResult>> {
+            return client.post<MidtransChargeResult>("/api/pos/midtrans/charge", input);
+        },
+        async getMidtransStatus(orderNumberOrId: string | number): Promise<ApiSuccess<MidtransStatusResult>> {
+            return client.get<MidtransStatusResult>(`/api/pos/midtrans/status/${orderNumberOrId}`);
+        },
+        async simulateMidtransPayment(salesOrderId: number, paymentType = "qris"): Promise<ApiSuccess<any>> {
+            return client.post<any>("/api/pos/midtrans/simulate-payment", { salesOrderId, paymentType });
         },
     };
 }

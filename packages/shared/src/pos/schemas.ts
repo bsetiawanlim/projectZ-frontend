@@ -280,3 +280,68 @@ export interface ProductSalesItemReport {
     averagePrice?: number;
     totalRevenue: number;
 }
+
+// ── Midtrans Integration ─────────────────────────────────────────────
+export const midtransSnapTokenSchema = z.object({
+    salesOrderId: z.number().int().positive("Sales order ID must be greater than 0"),
+    customerDetails: z.object({
+        name: z.string().max(100).optional(),
+        email: z.string().email().optional(),
+        phone: z.string().max(30).optional(),
+    }).optional(),
+});
+export type MidtransSnapTokenInput = z.infer<typeof midtransSnapTokenSchema>;
+
+export const midtransChargeSchema = z.object({
+    salesOrderId: z.number().int().positive("Sales order ID must be greater than 0"),
+    paymentType: z.enum(["qris", "bank_transfer", "gopay", "shopeepay"]).default("qris"),
+    bank: z.enum(["bca", "bni", "bri", "permata"]).optional(),
+    customerDetails: z.object({
+        name: z.string().max(100).optional(),
+        email: z.string().email().optional(),
+        phone: z.string().max(30).optional(),
+    }).optional(),
+});
+export type MidtransChargeInput = z.infer<typeof midtransChargeSchema>;
+
+export interface MidtransConfigResponse {
+    clientKey: string;
+    isProduction: boolean;
+    snapScriptUrl: string;
+    isConfigured: boolean;
+    isSandboxSimulation: boolean;
+}
+
+export interface MidtransSnapTokenResult {
+    token: string;
+    redirectUrl: string;
+    orderId: string;
+    grossAmount: number;
+    salesOrderNumber?: string;
+    isSimulated?: boolean;
+    message?: string;
+}
+
+export interface MidtransChargeResult {
+    orderId: string;
+    transactionId: string;
+    paymentType: string;
+    transactionStatus: string;
+    grossAmount: number;
+    salesOrderNumber?: string;
+    qrString?: string;
+    qrImageUrl?: string;
+    vaNumber?: string;
+    bank?: string;
+    isSimulated?: boolean;
+    message?: string;
+}
+
+export interface MidtransStatusResult {
+    orderNumber: string;
+    status: string;
+    isPaid: boolean;
+    grandTotal: number;
+    payments?: SalesPaymentRecord[];
+}
+

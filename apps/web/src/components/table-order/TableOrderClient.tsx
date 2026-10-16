@@ -9,7 +9,27 @@ import {
   type TableMenuCategory,
   type TableMenuFacility,
   type SalesOrderRecord,
+  type MidtransConfigResponse,
+  type MidtransSnapTokenResult,
+  type MidtransChargeResult,
 } from "@pz/shared";
+
+declare global {
+  interface Window {
+    snap?: {
+      pay: (
+        token: string,
+        options?: {
+          onSuccess?: (result: any) => void;
+          onPending?: (result: any) => void;
+          onError?: (result: any) => void;
+          onClose?: () => void;
+        }
+      ) => void;
+      embed?: (token: string, options?: any) => void;
+    };
+  }
+}
 
 interface CartOrderItem {
   product: TableMenuItem;
@@ -50,12 +70,45 @@ export function TableOrderClient() {
 
   // Online Payment modal & state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"EWALLET" | "BANK_TRANSFER" | "CARD">("EWALLET");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"SNAP" | "EWALLET" | "BANK_TRANSFER" | "CARD">("SNAP");
   const [selectedVaBank, setSelectedVaBank] = useState<"BCA" | "MANDIRI" | "BRI" | "BNI">("BCA");
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [paymentTimer, setPaymentTimer] = useState(900); // 15 mins
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [copiedVa, setCopiedVa] = useState(false);
+
+  // Midtrans State
+  const [midtransConfig, setMidtransConfig] = useState<MidtransConfigResponse | null>(null);
+  const [midtransLoading, setMidtransLoading] = useState(false);
+  const [activeDraftOrder, setActiveDraftOrder] = useState<SalesOrderRecord | null>(null);
+  const [snapTokenData, setSnapTokenData] = useState<MidtransSnapTokenResult | null>(null);
+  const [midtransChargeData, setMidtransChargeData] = useState<MidtransChargeResult | null>(null);
+
+  // Load Midtrans Configuration and inject Snap script
+  useEffect(() => {
+    let isMounted = true;
+    posApi
+      .getMidtransConfig()
+      .then((res) => {
+        if (!isMounted || !res.data) return;
+        setMidtransConfig(res.data);
+        if (typeof window !== "undefined" && !document.getElementById("midtrans-snap-script")) {
+          const script = document.createElement("script");
+          script.id = "midtrans-snap-script";
+          script.src = res.data.snapScriptUrl;
+          script.setAttribute("data-client-key", res.data.clientKey);
+          script.async = true;
+          document.body.appendChild(script);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load Midtrans config", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Card mock fields
   const [cardNumber, setCardNumber] = useState("4532 8190 2841 8821");
@@ -200,7 +253,134 @@ export function TableOrderClient() {
     setIsPaymentModalOpen(true);
   };
 
-  // Handle Online Payment Settlement (order processed by kitchen after payment)
+  // Helper to ensure draft order exists in DB awaiting payment
+  const ensureDraftOrder = async (): Promise<SalesOrderRecord> => {
+    if (activeDraftOrder) return activeDraftOrder;
+
+    const res = await posApi.createTableOrder({
+      facilityId: facilityId!,
+      tableNumber: tableNumber!,
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
+      notes: orderNotes.trim() || undefined,
+      paymentMethod: selectedPaymentMethod === "SNAP" ? "EWALLET" : selectedPaymentMethod,
+      paymentProvider: selectedPaymentMethod === "SNAP" ? "Midtrans Snap Gateway" : "Online Gateway",
+      isPaid: false,
+      items: cart.map((item) => ({
+        productId: item.product.id,
+        unitId: item.product.unitId,
+        quantity: item.quantity,
+        unitPrice: item.product.price,
+        discountPercentage: 0,
+        notes: item.notes.trim() || undefined,
+      })),
+    });
+
+    const order = (res as any).data?.salesOrder || (res as any).data || (res as any).salesOrder;
+    setActiveDraftOrder(order);
+    return order;
+  };
+
+  // Pay with Midtrans Snap Gateway (all-in-one modal)
+  const handlePayWithMidtransSnap = async () => {
+    if (!facilityId || !tableNumber || cart.length === 0) return;
+    setMidtransLoading(true);
+    setPaymentError(null);
+
+    try {
+      const order = await ensureDraftOrder();
+
+      const snapRes = await posApi.createMidtransSnapToken({
+        salesOrderId: order.id,
+        customerDetails: {
+          name: customerName.trim() || `Table ${tableNumber}`,
+          phone: customerPhone.trim() || undefined,
+        },
+      });
+
+      const snapData = snapRes.data;
+      setSnapTokenData(snapData);
+
+      if (typeof window !== "undefined" && window.snap && !snapData?.isSimulated) {
+        window.snap.pay(snapData.token, {
+          onSuccess: async () => {
+            const statusRes = await posApi.getTableOrderStatus(order.id);
+            const finishedOrder = (statusRes as any).data?.order || order;
+            setSubmittedOrder(finishedOrder);
+            setCart([]);
+            setIsPaymentModalOpen(false);
+            setIsReviewOpen(false);
+          },
+          onPending: async () => {
+            const statusRes = await posApi.getTableOrderStatus(order.id);
+            const finishedOrder = (statusRes as any).data?.order || order;
+            setSubmittedOrder(finishedOrder);
+            setCart([]);
+            setIsPaymentModalOpen(false);
+            setIsReviewOpen(false);
+          },
+          onError: () => {
+            setPaymentError("Midtrans transaction was declined or failed. Please try another method.");
+          },
+          onClose: () => {
+            console.log("Customer closed Midtrans Snap popup without completing payment.");
+          },
+        });
+      }
+    } catch (err: any) {
+      console.error("Midtrans Snap error", err);
+      setPaymentError(err.message || "Unable to initiate Midtrans Snap payment.");
+    } finally {
+      setMidtransLoading(false);
+    }
+  };
+
+  // Generate Core API Direct QRIS / VA Charge
+  const handleGenerateCoreCharge = async (paymentType: "qris" | "bank_transfer", bank?: string) => {
+    setMidtransLoading(true);
+    setPaymentError(null);
+    try {
+      const order = await ensureDraftOrder();
+      const res = await posApi.createMidtransCharge({
+        salesOrderId: order.id,
+        paymentType,
+        bank: (bank?.toLowerCase() || undefined) as any,
+        customerDetails: {
+          name: customerName.trim() || `Table ${tableNumber}`,
+          phone: customerPhone.trim() || undefined,
+        },
+      });
+      setMidtransChargeData(res.data);
+    } catch (err: any) {
+      console.error("Midtrans charge error", err);
+      setPaymentError(err.message || "Failed to generate payment details.");
+    } finally {
+      setMidtransLoading(false);
+    }
+  };
+
+  // Simulate Instant Settlement (Sandbox/Test helper)
+  const handleSimulateMidtransSettlement = async (method = "qris") => {
+    setVerifyingPayment(true);
+    setPaymentError(null);
+    try {
+      const order = await ensureDraftOrder();
+      await posApi.simulateMidtransPayment(order.id, method);
+      const statusRes = await posApi.getTableOrderStatus(order.id);
+      const finishedOrder = (statusRes as any).data?.order || order;
+      setSubmittedOrder(finishedOrder);
+      setCart([]);
+      setIsPaymentModalOpen(false);
+      setIsReviewOpen(false);
+    } catch (err: any) {
+      console.error("Simulation error", err);
+      setPaymentError(err.message || "Simulation failed. Please try again.");
+    } finally {
+      setVerifyingPayment(false);
+    }
+  };
+
+  // Handle Online Payment Settlement fallback (direct settlement)
   const handleExecuteOnlinePayment = async () => {
     if (!facilityId || !tableNumber) {
       alert("Invalid table session. Please scan your table barcode.");
@@ -217,11 +397,15 @@ export function TableOrderClient() {
 
       const refNumber = `PAY-${Date.now().toString().slice(-8)}`;
       const providerName =
-        selectedPaymentMethod === "EWALLET"
+        selectedPaymentMethod === "SNAP"
+          ? "Midtrans Snap Gateway"
+          : selectedPaymentMethod === "EWALLET"
           ? "QRIS (GoPay/OVO/Dana/BCA)"
           : selectedPaymentMethod === "BANK_TRANSFER"
           ? `${selectedVaBank} Virtual Account`
           : "Credit/Debit Card Online";
+
+      const methodEnum = selectedPaymentMethod === "SNAP" ? "EWALLET" : selectedPaymentMethod;
 
       const res = await posApi.createTableOrder({
         facilityId,
@@ -229,7 +413,7 @@ export function TableOrderClient() {
         customerName: customerName.trim() || undefined,
         customerPhone: customerPhone.trim() || undefined,
         notes: orderNotes.trim() || undefined,
-        paymentMethod: selectedPaymentMethod,
+        paymentMethod: methodEnum,
         paymentProvider: providerName,
         referenceNumber: refNumber,
         isPaid: true,
@@ -1512,8 +1696,8 @@ export function TableOrderClient() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: "0.4rem",
+                    gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                    gap: "0.35rem",
                     backgroundColor: "var(--bg-surface-elevated)",
                     padding: "0.3rem",
                     borderRadius: "var(--radius-md)",
@@ -1522,15 +1706,38 @@ export function TableOrderClient() {
                 >
                   <button
                     type="button"
+                    onClick={() => setSelectedPaymentMethod("SNAP")}
+                    style={{
+                      padding: "0.55rem 0.3rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "none",
+                      backgroundColor: selectedPaymentMethod === "SNAP" ? "var(--primary)" : "transparent",
+                      color: selectedPaymentMethod === "SNAP" ? "#ffffff" : "var(--text-secondary)",
+                      fontWeight: 700,
+                      fontSize: "0.75rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "0.2rem",
+                      transition: "all var(--transition-fast)",
+                    }}
+                  >
+                    <span>✨</span>
+                    <span>Midtrans</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setSelectedPaymentMethod("EWALLET")}
                     style={{
-                      padding: "0.55rem 0.4rem",
+                      padding: "0.55rem 0.3rem",
                       borderRadius: "var(--radius-sm)",
                       border: "none",
                       backgroundColor: selectedPaymentMethod === "EWALLET" ? "var(--primary)" : "transparent",
                       color: selectedPaymentMethod === "EWALLET" ? "#ffffff" : "var(--text-secondary)",
                       fontWeight: 700,
-                      fontSize: "0.78rem",
+                      fontSize: "0.75rem",
                       cursor: "pointer",
                       display: "flex",
                       flexDirection: "column",
@@ -1540,20 +1747,20 @@ export function TableOrderClient() {
                     }}
                   >
                     <span>📱</span>
-                    <span>QRIS / E-Wallet</span>
+                    <span>QRIS</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setSelectedPaymentMethod("BANK_TRANSFER")}
                     style={{
-                      padding: "0.55rem 0.4rem",
+                      padding: "0.55rem 0.3rem",
                       borderRadius: "var(--radius-sm)",
                       border: "none",
                       backgroundColor: selectedPaymentMethod === "BANK_TRANSFER" ? "var(--primary)" : "transparent",
                       color: selectedPaymentMethod === "BANK_TRANSFER" ? "#ffffff" : "var(--text-secondary)",
                       fontWeight: 700,
-                      fontSize: "0.78rem",
+                      fontSize: "0.75rem",
                       cursor: "pointer",
                       display: "flex",
                       flexDirection: "column",
@@ -1563,20 +1770,20 @@ export function TableOrderClient() {
                     }}
                   >
                     <span>🏛️</span>
-                    <span>Virtual Account</span>
+                    <span>VA Bank</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setSelectedPaymentMethod("CARD")}
                     style={{
-                      padding: "0.55rem 0.4rem",
+                      padding: "0.55rem 0.3rem",
                       borderRadius: "var(--radius-sm)",
                       border: "none",
                       backgroundColor: selectedPaymentMethod === "CARD" ? "var(--primary)" : "transparent",
                       color: selectedPaymentMethod === "CARD" ? "#ffffff" : "var(--text-secondary)",
                       fontWeight: 700,
-                      fontSize: "0.78rem",
+                      fontSize: "0.75rem",
                       cursor: "pointer",
                       display: "flex",
                       flexDirection: "column",
@@ -1605,6 +1812,152 @@ export function TableOrderClient() {
                   }}
                 >
                   ⚠️ {paymentError}
+                </div>
+              )}
+
+              {/* Tab 0: Midtrans Snap Gateway */}
+              {selectedPaymentMethod === "SNAP" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  <div
+                    style={{
+                      padding: "1rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-surface-elevated)",
+                      border: "1px solid var(--border-glow)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.6rem",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontSize: "1.4rem" }}>⚡</span>
+                        <div>
+                          <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                            Midtrans Snap Gateway
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                            All-in-one payment checkout for Indonesia
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          padding: "0.25rem 0.5rem",
+                          borderRadius: "var(--radius-full)",
+                          backgroundColor: midtransConfig?.isConfigured
+                            ? "rgba(16, 185, 129, 0.15)"
+                            : "rgba(99, 102, 241, 0.15)",
+                          color: midtransConfig?.isConfigured ? "var(--accent-emerald)" : "var(--primary)",
+                          border: `1px solid ${midtransConfig?.isConfigured ? "var(--accent-emerald)" : "var(--primary)"}`,
+                        }}
+                      >
+                        {midtransConfig?.isConfigured ? "Live Sandbox" : "Simulation Mode"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "0.76rem",
+                        color: "var(--text-secondary)",
+                        lineHeight: 1.45,
+                        backgroundColor: "var(--bg-surface)",
+                        padding: "0.65rem",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--border-subtle)",
+                      }}
+                    >
+                      Supports <strong>GoPay, ShopeePay, QRIS, BCA/Mandiri/BNI/BRI/Permata Virtual Account</strong>, and <strong>Cards</strong>.
+                    </div>
+                  </div>
+
+                  {/* Midtrans Snap Action Button */}
+                  <button
+                    id="midtrans-snap-pay-btn"
+                    disabled={midtransLoading || verifyingPayment}
+                    onClick={handlePayWithMidtransSnap}
+                    style={{
+                      width: "100%",
+                      padding: "0.9rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--primary)",
+                      color: "#ffffff",
+                      fontSize: "1rem",
+                      fontWeight: 800,
+                      border: "none",
+                      cursor: midtransLoading || verifyingPayment ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
+                      opacity: midtransLoading || verifyingPayment ? 0.7 : 1,
+                    }}
+                  >
+                    {midtransLoading ? (
+                      <>
+                        <span style={{ animation: "spin 1s linear infinite" }}>🔄</span>
+                        <span>Connecting to Midtrans...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>💳</span>
+                        <span>Open Midtrans Snap • {formatIDR(grandTotal)}</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Sandbox Instant Simulation Settlement Button */}
+                  <div
+                    style={{
+                      padding: "0.85rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "rgba(16, 185, 129, 0.08)",
+                      border: "1px dashed var(--accent-emerald)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", fontWeight: 700, marginBottom: "0.45rem" }}>
+                      🧪 Developer &amp; QA Sandbox Test Action
+                    </div>
+                    <button
+                      id="midtrans-simulate-instant-settlement-btn"
+                      disabled={verifyingPayment}
+                      onClick={() => handleSimulateMidtransSettlement("midtrans_snap")}
+                      style={{
+                        width: "100%",
+                        padding: "0.65rem",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-emerald)",
+                        color: "#ffffff",
+                        fontSize: "0.85rem",
+                        fontWeight: 700,
+                        border: "none",
+                        cursor: verifyingPayment ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.4rem",
+                      }}
+                    >
+                      {verifyingPayment ? (
+                        <>
+                          <span style={{ animation: "spin 1s linear infinite" }}>🔄</span>
+                          <span>Settling &amp; Deducting Recipe Stock...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>⚡</span>
+                          <span>Simulate Instant Midtrans Settlement</span>
+                        </>
+                      )}
+                    </button>
+                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "0.4rem" }}>
+                      Emulates Midtrans webhook callback: Marks order COMPLETED &amp; deducts ingredients.
+                    </div>
+                  </div>
                 </div>
               )}
 
