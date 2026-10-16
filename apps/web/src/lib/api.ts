@@ -1,4 +1,4 @@
-﻿import {
+import {
   createApiClient,
   createAuthApi,
   createPosApi,
@@ -16,9 +16,12 @@
 } from "@pz/shared";
 
 const API_BASE_URL =
-  (typeof window !== "undefined" && window.location.hostname)
-    ? `${window.location.protocol}//${window.location.hostname}:3000`
-    : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000");
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined"
+    ? (window.location.port === "3001"
+        ? `${window.location.protocol}//${window.location.hostname}:3000`
+        : window.location.origin)
+    : "http://localhost:3000");
 
 export const apiClient = createApiClient({
   baseUrl: API_BASE_URL,
