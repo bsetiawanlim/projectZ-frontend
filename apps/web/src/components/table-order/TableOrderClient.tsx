@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { posApi, facilityApi, type FacilityRecord } from "@/lib/api";
+import { posApi } from "@/lib/api";
 import {
   formatIDR,
   type TableMenuItem,
@@ -19,19 +19,11 @@ interface CartOrderItem {
 
 export function TableOrderClient() {
   const searchParams = useSearchParams();
-  const initialFacilityId = searchParams.get("facilityId")
-    ? Number(searchParams.get("facilityId"))
-    : null;
-  const initialTableNumber = searchParams.get("tableNumber") || "";
+  const facilityIdParam = searchParams.get("facilityId");
+  const tableNumberParam = searchParams.get("tableNumber");
 
-  const [facilityId, setFacilityId] = useState<number | null>(initialFacilityId);
-  const [tableNumber, setTableNumber] = useState<string>(initialTableNumber);
-
-  // Reference facilities for fallback selector
-  const [facilities, setFacilities] = useState<FacilityRecord[]>([]);
-  const [isTableModalOpen, setIsTableModalOpen] = useState(false);
-  const [tempTableInput, setTempTableInput] = useState(initialTableNumber);
-  const [tempFacilityInput, setTempFacilityInput] = useState<number | null>(initialFacilityId);
+  const facilityId = facilityIdParam ? Number(facilityIdParam) : null;
+  const tableNumber = (tableNumberParam || "").trim();
 
   // Menu data
   const [facilityInfo, setFacilityInfo] = useState<TableMenuFacility | null>(null);
@@ -56,30 +48,19 @@ export function TableOrderClient() {
   const [submitting, setSubmitting] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<SalesOrderRecord | null>(null);
 
-  // Load facilities for table configuration fallback
+  // Load Menu for the specific scanned facility
   useEffect(() => {
-    facilityApi
-      .getFacilities({ limit: 50 })
-      .then((res: any) => {
-        const facs = res?.data || res?.items || (Array.isArray(res) ? res : []);
-        setFacilities(facs);
-        if (!facilityId && facs.length > 0) {
-          const store = facs.find((f: any) => f.type === "STORE") || facs[0];
-          setFacilityId(store.id);
-          setTempFacilityInput(store.id);
-        }
-      })
-      .catch((err) => console.error("Error loading facilities", err));
-  }, [facilityId]);
+    if (!facilityId) {
+      setLoading(false);
+      return;
+    }
 
-  // Load Menu for facility
-  useEffect(() => {
     let isMounted = true;
     setLoading(true);
     setLoadError(null);
 
     posApi
-      .getTableMenu(facilityId ?? undefined)
+      .getTableMenu(facilityId)
       .then((res) => {
         if (!isMounted) return;
         const data = res.data;
@@ -174,16 +155,10 @@ export function TableOrderClient() {
     return cart.reduce((sum, item) => sum + item.quantity * item.product.price, 0);
   }, [cart]);
 
-  // Handle Order Submit
+  // Handle Order Submit (table and facility are strictly from the URL)
   const handlePlaceOrder = async () => {
-    if (!facilityId) {
-      alert("Please select a store / outlet facility.");
-      setIsTableModalOpen(true);
-      return;
-    }
-    if (!tableNumber.trim()) {
-      alert("Please specify your table number before placing order.");
-      setIsTableModalOpen(true);
+    if (!facilityId || !tableNumber) {
+      alert("Invalid table session. Please scan your table barcode.");
       return;
     }
     if (cart.length === 0) {
@@ -195,7 +170,7 @@ export function TableOrderClient() {
       setSubmitting(true);
       const res = await posApi.createTableOrder({
         facilityId,
-        tableNumber: tableNumber.trim(),
+        tableNumber,
         customerName: customerName.trim() || undefined,
         customerPhone: customerPhone.trim() || undefined,
         notes: orderNotes.trim() || undefined,
@@ -220,14 +195,77 @@ export function TableOrderClient() {
     }
   };
 
-  // Save Table & Facility settings
-  const handleSaveTableSettings = () => {
-    if (tempFacilityInput) {
-      setFacilityId(tempFacilityInput);
-    }
-    setTableNumber(tempTableInput.trim());
-    setIsTableModalOpen(false);
-  };
+  // ── Missing Table or Facility Screen (Customer cannot set/change them) ──
+  if (!facilityId || !tableNumber) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          backgroundColor: "var(--bg-primary)",
+          color: "var(--text-primary)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "1.5rem",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "460px",
+            width: "100%",
+            backgroundColor: "var(--bg-surface)",
+            borderRadius: "var(--radius-lg)",
+            border: "1px solid var(--border-subtle)",
+            padding: "2.5rem 1.5rem",
+            boxShadow: "var(--shadow-glass)",
+          }}
+        >
+          <div
+            style={{
+              width: "72px",
+              height: "72px",
+              borderRadius: "50%",
+              backgroundColor: "rgba(99, 102, 241, 0.12)",
+              border: "2px solid var(--border-glow)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 1.25rem",
+              fontSize: "2.2rem",
+            }}
+          >
+            📷
+          </div>
+          <h2 style={{ fontSize: "1.35rem", fontWeight: 800 }}>Please Scan Your Table Barcode</h2>
+          <p
+            style={{
+              color: "var(--text-secondary)",
+              fontSize: "0.875rem",
+              marginTop: "0.5rem",
+              lineHeight: 1.5,
+            }}
+          >
+            To browse our digital menu and place an order, please scan the QR code sticker located directly on your dining table.
+          </p>
+          <div
+            style={{
+              marginTop: "1.5rem",
+              padding: "0.85rem",
+              borderRadius: "var(--radius-md)",
+              backgroundColor: "var(--bg-surface-elevated)",
+              border: "1px solid var(--border-subtle)",
+              fontSize: "0.8rem",
+              color: "var(--text-muted)",
+            }}
+          >
+            Table numbers and store locations are assigned automatically by the scanned QR code.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Success Confirmation Screen ──────────────────────────────────────────
   if (submittedOrder) {
@@ -310,7 +348,7 @@ export function TableOrderClient() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ color: "var(--text-muted)" }}>Status:</span>
-              <span style={{ fontWeight: 700, color: "var(--accent-amber)" }}>Received / Cooking</span>
+              <span style={{ fontWeight: 700, color: "var(--accent-amber)" }}>Received / In Preparation</span>
             </div>
             <div
               style={{
@@ -375,7 +413,7 @@ export function TableOrderClient() {
         }}
       >
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          {/* Outlet Title & Table Pill */}
+          {/* Outlet Title & Static Fixed Table Pill */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -391,33 +429,28 @@ export function TableOrderClient() {
               )}
             </div>
 
-            {/* Table Number Badge (clickable to edit) */}
-            <button
-              id="table-picker-badge-btn"
-              onClick={() => {
-                setTempTableInput(tableNumber);
-                setTempFacilityInput(facilityId);
-                setIsTableModalOpen(true);
-              }}
+            {/* Static Read-Only Table Badge (Cannot be changed or edited) */}
+            <div
+              id="table-number-badge"
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "0.35rem",
-                padding: "0.4rem 0.75rem",
+                padding: "0.4rem 0.85rem",
                 borderRadius: "var(--radius-full)",
-                backgroundColor: tableNumber ? "rgba(99, 102, 241, 0.18)" : "rgba(245, 158, 11, 0.2)",
-                border: tableNumber ? "1px solid var(--border-glow)" : "1px solid rgba(245, 158, 11, 0.4)",
-                color: tableNumber ? "var(--primary)" : "var(--accent-amber)",
-                fontSize: "0.825rem",
-                fontWeight: 700,
-                cursor: "pointer",
+                backgroundColor: "rgba(99, 102, 241, 0.18)",
+                border: "1px solid var(--border-glow)",
+                color: "var(--primary)",
+                fontSize: "0.85rem",
+                fontWeight: 800,
                 whiteSpace: "nowrap",
+                userSelect: "none",
               }}
+              title="Table number is fixed to this table barcode"
             >
               <span>🪑</span>
-              <span>{tableNumber ? `Table ${tableNumber}` : "Set Table #"}</span>
-              <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>✎</span>
-            </button>
+              <span>Table {tableNumber}</span>
+            </div>
           </div>
 
           {/* Quick Search Bar */}
@@ -527,49 +560,6 @@ export function TableOrderClient() {
         </div>
       </header>
 
-      {/* Missing Table Alert Notice */}
-      {!tableNumber && (
-        <div
-          style={{
-            maxWidth: "800px",
-            margin: "1rem auto 0",
-            padding: "0 1rem",
-            width: "100%",
-          }}
-        >
-          <div
-            onClick={() => {
-              setTempTableInput(tableNumber);
-              setTempFacilityInput(facilityId);
-              setIsTableModalOpen(true);
-            }}
-            style={{
-              backgroundColor: "rgba(245, 158, 11, 0.12)",
-              border: "1px solid rgba(245, 158, 11, 0.4)",
-              borderRadius: "var(--radius-md)",
-              padding: "0.75rem 1rem",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              cursor: "pointer",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-              <span style={{ fontSize: "1.2rem" }}>⚠️</span>
-              <div>
-                <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--accent-amber)" }}>
-                  No Table Number Detected
-                </p>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                  Tap here to enter your table number so the kitchen knows where to serve.
-                </p>
-              </div>
-            </div>
-            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--accent-amber)" }}>Set →</span>
-          </div>
-        </div>
-      )}
-
       {/* Main Product Catalog List */}
       <main style={{ maxWidth: "800px", margin: "1rem auto", padding: "0 1rem", width: "100%", flex: 1 }}>
         {loading ? (
@@ -593,20 +583,6 @@ export function TableOrderClient() {
             <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "1rem" }}>
               {loadError}
             </p>
-            <button
-              onClick={() => setFacilityId((f) => f)}
-              style={{
-                padding: "0.5rem 1.25rem",
-                borderRadius: "var(--radius-md)",
-                backgroundColor: "var(--primary)",
-                color: "#ffffff",
-                border: "none",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              Retry
-            </button>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div
@@ -1014,7 +990,7 @@ export function TableOrderClient() {
               <div>
                 <h3 style={{ fontSize: "1.2rem", fontWeight: 800 }}>Review Your Order</h3>
                 <span style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 700 }}>
-                  🪑 Table: {tableNumber || "Not Set"} • {facilityInfo?.facilityName || "Outlet"}
+                  🪑 Table {tableNumber} • {facilityInfo?.facilityName || "Outlet"}
                 </span>
               </div>
               <button
@@ -1271,131 +1247,6 @@ export function TableOrderClient() {
                 }}
               >
                 {submitting ? "Sending Order to Kitchen..." : "🚀 Place Order Now"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Set Table Number Modal */}
-      {isTableModalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.8)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 70,
-            padding: "1.5rem",
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "420px",
-              backgroundColor: "var(--bg-surface)",
-              borderRadius: "var(--radius-lg)",
-              border: "1px solid var(--border-glow)",
-              padding: "1.5rem",
-            }}
-          >
-            <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--text-primary)" }}>
-              🪑 Your Table Details
-            </h3>
-            <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
-              Please confirm the table number printed on your table sticker or placard.
-            </p>
-
-            <div style={{ marginTop: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>
-                  Store / Outlet:
-                </label>
-                <select
-                  value={tempFacilityInput ?? ""}
-                  onChange={(e) => setTempFacilityInput(Number(e.target.value))}
-                  style={{
-                    width: "100%",
-                    marginTop: "0.3rem",
-                    padding: "0.5rem",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "var(--bg-surface-elevated)",
-                    border: "1px solid var(--border-subtle)",
-                    color: "var(--text-primary)",
-                    fontSize: "0.85rem",
-                    outline: "none",
-                  }}
-                >
-                  {facilities.map((fac) => (
-                    <option key={fac.id} value={fac.id}>
-                      🏪 {fac.facilityName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>
-                  Table Number:
-                </label>
-                <input
-                  id="confirm-table-number-input"
-                  type="text"
-                  placeholder="e.g. 5 or T-04"
-                  value={tempTableInput}
-                  onChange={(e) => setTempTableInput(e.target.value)}
-                  style={{
-                    width: "100%",
-                    marginTop: "0.3rem",
-                    padding: "0.6rem 0.75rem",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "var(--bg-surface-elevated)",
-                    border: "1px solid var(--border-glow)",
-                    color: "var(--text-primary)",
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                    outline: "none",
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
-              <button
-                onClick={() => setIsTableModalOpen(false)}
-                style={{
-                  flex: 1,
-                  padding: "0.65rem",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: "transparent",
-                  border: "1px solid var(--border-subtle)",
-                  color: "var(--text-secondary)",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                id="save-table-number-btn"
-                onClick={handleSaveTableSettings}
-                disabled={!tempTableInput.trim()}
-                style={{
-                  flex: 1,
-                  padding: "0.65rem",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: "var(--primary)",
-                  border: "none",
-                  color: "#ffffff",
-                  fontWeight: 700,
-                  cursor: !tempTableInput.trim() ? "not-allowed" : "pointer",
-                  opacity: !tempTableInput.trim() ? 0.6 : 1,
-                }}
-              >
-                Confirm Table
               </button>
             </div>
           </div>
