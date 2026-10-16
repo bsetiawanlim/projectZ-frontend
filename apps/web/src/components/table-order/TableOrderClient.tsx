@@ -48,6 +48,37 @@ export function TableOrderClient() {
   const [submitting, setSubmitting] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<SalesOrderRecord | null>(null);
 
+  // Online Payment modal & state
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"EWALLET" | "BANK_TRANSFER" | "CARD">("EWALLET");
+  const [selectedVaBank, setSelectedVaBank] = useState<"BCA" | "MANDIRI" | "BRI" | "BNI">("BCA");
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [paymentTimer, setPaymentTimer] = useState(900); // 15 mins
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [copiedVa, setCopiedVa] = useState(false);
+
+  // Card mock fields
+  const [cardNumber, setCardNumber] = useState("4532 8190 2841 8821");
+  const [cardExpiry, setCardExpiry] = useState("08/28");
+  const [cardCvv, setCardCvv] = useState("892");
+  const [cardHolder, setCardHolder] = useState("");
+
+  const vaNumbers: Record<string, string> = {
+    BCA: "8808 2910 4019 3321",
+    MANDIRI: "8950 1829 4019 2201",
+    BRI: "1029 8839 2019 4410",
+    BNI: "9880 1829 4910 2239",
+  };
+
+  // Payment timer
+  useEffect(() => {
+    if (!isPaymentModalOpen) return;
+    const timer = setInterval(() => {
+      setPaymentTimer((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isPaymentModalOpen]);
+
   // Load Menu for the specific scanned facility
   useEffect(() => {
     if (!facilityId) {
@@ -155,8 +186,22 @@ export function TableOrderClient() {
     return cart.reduce((sum, item) => sum + item.quantity * item.product.price, 0);
   }, [cart]);
 
-  // Handle Order Submit (table and facility are strictly from the URL)
-  const handlePlaceOrder = async () => {
+  // Handle Proceeding to Payment
+  const handleOpenPaymentModal = () => {
+    if (!facilityId || !tableNumber) {
+      alert("Invalid table session. Please scan your table barcode.");
+      return;
+    }
+    if (cart.length === 0) {
+      alert("Your cart is empty. Please select items from the menu.");
+      return;
+    }
+    setPaymentError(null);
+    setIsPaymentModalOpen(true);
+  };
+
+  // Handle Online Payment Settlement (order processed by kitchen after payment)
+  const handleExecuteOnlinePayment = async () => {
     if (!facilityId || !tableNumber) {
       alert("Invalid table session. Please scan your table barcode.");
       return;
@@ -167,13 +212,27 @@ export function TableOrderClient() {
     }
 
     try {
-      setSubmitting(true);
+      setVerifyingPayment(true);
+      setPaymentError(null);
+
+      const refNumber = `PAY-${Date.now().toString().slice(-8)}`;
+      const providerName =
+        selectedPaymentMethod === "EWALLET"
+          ? "QRIS (GoPay/OVO/Dana/BCA)"
+          : selectedPaymentMethod === "BANK_TRANSFER"
+          ? `${selectedVaBank} Virtual Account`
+          : "Credit/Debit Card Online";
+
       const res = await posApi.createTableOrder({
         facilityId,
         tableNumber,
         customerName: customerName.trim() || undefined,
         customerPhone: customerPhone.trim() || undefined,
         notes: orderNotes.trim() || undefined,
+        paymentMethod: selectedPaymentMethod,
+        paymentProvider: providerName,
+        referenceNumber: refNumber,
+        isPaid: true,
         items: cart.map((item) => ({
           productId: item.product.id,
           unitId: item.product.unitId,
@@ -187,11 +246,13 @@ export function TableOrderClient() {
       const order = (res as any).data?.salesOrder || (res as any).data || (res as any).salesOrder;
       setSubmittedOrder(order);
       setCart([]);
+      setIsPaymentModalOpen(false);
       setIsReviewOpen(false);
     } catch (err: any) {
-      alert(err.message || "Failed to submit order. Please try again or alert a staff member.");
+      console.error("Payment settlement error", err);
+      setPaymentError(err.message || "Online payment verification failed. Please try again or alert a staff member.");
     } finally {
-      setSubmitting(false);
+      setVerifyingPayment(false);
     }
   };
 
@@ -269,6 +330,9 @@ export function TableOrderClient() {
 
   // ── Success Confirmation Screen ──────────────────────────────────────────
   if (submittedOrder) {
+    const paymentInfo = (submittedOrder as any).payments?.[0];
+    const paymentMethodLabel = paymentInfo?.notes || paymentInfo?.method || "Online Payment";
+
     return (
       <div
         style={{
@@ -285,7 +349,7 @@ export function TableOrderClient() {
         <div
           style={{
             width: "100%",
-            maxWidth: "460px",
+            maxWidth: "480px",
             backgroundColor: "var(--bg-surface)",
             borderRadius: "var(--radius-lg)",
             border: "1px solid var(--border-glow)",
@@ -294,41 +358,73 @@ export function TableOrderClient() {
             boxShadow: "var(--shadow-glass)",
           }}
         >
+          {/* Animated Green Badge */}
           <div
             style={{
-              width: "72px",
-              height: "72px",
+              width: "76px",
+              height: "76px",
               borderRadius: "50%",
               backgroundColor: "rgba(16, 185, 129, 0.15)",
-              border: "2px solid var(--accent-emerald)",
+              border: "3px solid var(--accent-emerald)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               margin: "0 auto 1.25rem",
-              fontSize: "2.2rem",
+              fontSize: "2.4rem",
+              boxShadow: "0 0 20px rgba(16, 185, 129, 0.35)",
             }}
           >
             ✅
           </div>
 
           <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text-primary)" }}>
-            Order Sent to Kitchen!
+            Payment Verified &amp; Settled!
           </h2>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginTop: "0.35rem" }}>
-            Your meal is being prepared. Staff will deliver it to your table shortly.
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginTop: "0.35rem", lineHeight: 1.5 }}>
+            Your meal order has been paid online and received by the kitchen. Preparation has begun!
           </p>
 
+          {/* Kitchen Status Pill */}
           <div
             style={{
-              margin: "1.5rem 0",
-              padding: "1rem",
+              margin: "1.25rem auto 1.5rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.45rem 1rem",
+              borderRadius: "var(--radius-full)",
+              backgroundColor: "rgba(245, 158, 11, 0.12)",
+              border: "1px solid rgba(245, 158, 11, 0.4)",
+              color: "var(--accent-amber)",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+            }}
+          >
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor: "var(--accent-amber)",
+                display: "inline-block",
+                boxShadow: "0 0 8px var(--accent-amber)",
+              }}
+            />
+            <span>🍳 In Kitchen • Being Cooked Now</span>
+          </div>
+
+          {/* Order & Payment Summary Card */}
+          <div
+            style={{
+              margin: "0 0 1.5rem 0",
+              padding: "1.2rem",
               borderRadius: "var(--radius-md)",
               backgroundColor: "var(--bg-surface-elevated)",
               border: "1px solid var(--border-subtle)",
               textAlign: "left",
               display: "flex",
               flexDirection: "column",
-              gap: "0.5rem",
+              gap: "0.6rem",
               fontSize: "0.85rem",
             }}
           >
@@ -337,33 +433,73 @@ export function TableOrderClient() {
               <span style={{ fontWeight: 700, color: "var(--primary)" }}>{submittedOrder.orderNumber}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--text-muted)" }}>Table:</span>
-              <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>
+              <span style={{ color: "var(--text-muted)" }}>Dining Table:</span>
+              <span style={{ fontWeight: 800, color: "var(--text-primary)" }}>
                 🪑 Table {submittedOrder.tableNumber || tableNumber}
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--text-muted)" }}>Outlet:</span>
+              <span style={{ color: "var(--text-muted)" }}>Store Outlet:</span>
               <span>{facilityInfo?.facilityName || "Main Outlet"}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--text-muted)" }}>Status:</span>
-              <span style={{ fontWeight: 700, color: "var(--accent-amber)" }}>Received / In Preparation</span>
+              <span style={{ color: "var(--text-muted)" }}>Payment Method:</span>
+              <span style={{ fontWeight: 600 }}>{paymentMethodLabel}</span>
             </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "var(--text-muted)" }}>Payment Status:</span>
+              <span style={{ fontWeight: 800, color: "var(--accent-emerald)" }}>PAID (SETTLED)</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "var(--text-muted)" }}>Kitchen Order Status:</span>
+              <span style={{ fontWeight: 800, color: "var(--accent-amber)" }}>COMPLETED &amp; PROCESSING</span>
+            </div>
+
+            {/* Items Breakdown */}
+            {submittedOrder.items && submittedOrder.items.length > 0 && (
+              <div
+                style={{
+                  borderTop: "1px dashed var(--border-subtle)",
+                  paddingTop: "0.6rem",
+                  marginTop: "0.2rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.4rem",
+                }}
+              >
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                  Items Ordered:
+                </div>
+                {submittedOrder.items.map((item: any, idx: number) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem" }}>
+                    <span>
+                      {item.quantity}x {item.productName || item.product?.productName}
+                    </span>
+                    <span style={{ fontWeight: 600 }}>{formatIDR(Number(item.totalPrice))}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                borderTop: "1px dashed var(--border-subtle)",
-                paddingTop: "0.5rem",
-                marginTop: "0.25rem",
-                fontWeight: 700,
+                borderTop: "1px solid var(--border-subtle)",
+                paddingTop: "0.6rem",
+                marginTop: "0.2rem",
+                fontWeight: 800,
+                fontSize: "1rem",
               }}
             >
-              <span>Total Amount:</span>
+              <span>Grand Total Paid:</span>
               <span style={{ color: "var(--accent-emerald)" }}>{formatIDR(submittedOrder.grandTotal)}</span>
             </div>
           </div>
+
+          <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
+            Staff will deliver your freshly prepared order directly to <strong>Table {tableNumber}</strong>. Sit back and enjoy!
+          </p>
 
           <button
             onClick={() => {
@@ -382,7 +518,7 @@ export function TableOrderClient() {
               transition: "background var(--transition-fast)",
             }}
           >
-            + Order More Food & Drinks
+            + Order Additional Food &amp; Drinks
           </button>
         </div>
       </div>
@@ -1227,7 +1363,7 @@ export function TableOrderClient() {
               <button
                 id="submit-table-order-btn"
                 disabled={submitting}
-                onClick={handlePlaceOrder}
+                onClick={handleOpenPaymentModal}
                 style={{
                   width: "100%",
                   padding: "0.9rem",
@@ -1237,8 +1373,7 @@ export function TableOrderClient() {
                   fontSize: "1rem",
                   fontWeight: 800,
                   border: "none",
-                  cursor: submitting ? "not-allowed" : "pointer",
-                  opacity: submitting ? 0.7 : 1,
+                  cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1246,8 +1381,700 @@ export function TableOrderClient() {
                   boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
                 }}
               >
-                {submitting ? "Sending Order to Kitchen..." : "🚀 Place Order Now"}
+                💳 Proceed to Online Payment • {formatIDR(grandTotal)}
               </button>
+              <div
+                style={{
+                  textAlign: "center",
+                  fontSize: "0.72rem",
+                  color: "var(--text-muted)",
+                  marginTop: "0.5rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.3rem",
+                }}
+              >
+                <span>🔒</span>
+                <span>Online payment required • Kitchen prepares order upon settlement</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Online Payment Modal ── */}
+      {isPaymentModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
+            backdropFilter: "blur(10px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 70,
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "460px",
+              maxHeight: "92vh",
+              display: "flex",
+              flexDirection: "column",
+              backgroundColor: "var(--bg-surface)",
+              borderRadius: "var(--radius-lg)",
+              border: "1px solid var(--border-glow)",
+              boxShadow: "0 20px 50px rgba(0, 0, 0, 0.6)",
+              overflow: "hidden",
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: "1.1rem 1.25rem",
+                borderBottom: "1px solid var(--border-subtle)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                backgroundColor: "var(--bg-surface-elevated)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                  Online Payment Checkout
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 700 }}>
+                  🪑 Table {tableNumber} • {totalItemCount} Items
+                </div>
+              </div>
+              <button
+                disabled={verifyingPayment}
+                onClick={() => setIsPaymentModalOpen(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "1.25rem",
+                  color: "var(--text-muted)",
+                  cursor: verifyingPayment ? "not-allowed" : "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
+              {/* Total Due Banner */}
+              <div
+                style={{
+                  padding: "0.9rem 1rem",
+                  borderRadius: "var(--radius-md)",
+                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%)",
+                  border: "1px solid rgba(99, 102, 241, 0.3)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Total Payment Due
+                  </div>
+                  <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--accent-emerald)" }}>
+                    {formatIDR(grandTotal)}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    backgroundColor: "rgba(16, 185, 129, 0.2)",
+                    border: "1px solid var(--accent-emerald)",
+                    borderRadius: "var(--radius-full)",
+                    padding: "0.3rem 0.65rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    color: "var(--accent-emerald)",
+                  }}
+                >
+                  ⚡ Direct Settlement
+                </div>
+              </div>
+
+              {/* Payment Method Selector Tabs */}
+              <div style={{ marginBottom: "1.25rem" }}>
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: "0.5rem" }}>
+                  Select Payment Method
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: "0.4rem",
+                    backgroundColor: "var(--bg-surface-elevated)",
+                    padding: "0.3rem",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--border-subtle)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod("EWALLET")}
+                    style={{
+                      padding: "0.55rem 0.4rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "none",
+                      backgroundColor: selectedPaymentMethod === "EWALLET" ? "var(--primary)" : "transparent",
+                      color: selectedPaymentMethod === "EWALLET" ? "#ffffff" : "var(--text-secondary)",
+                      fontWeight: 700,
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "0.2rem",
+                      transition: "all var(--transition-fast)",
+                    }}
+                  >
+                    <span>📱</span>
+                    <span>QRIS / E-Wallet</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod("BANK_TRANSFER")}
+                    style={{
+                      padding: "0.55rem 0.4rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "none",
+                      backgroundColor: selectedPaymentMethod === "BANK_TRANSFER" ? "var(--primary)" : "transparent",
+                      color: selectedPaymentMethod === "BANK_TRANSFER" ? "#ffffff" : "var(--text-secondary)",
+                      fontWeight: 700,
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "0.2rem",
+                      transition: "all var(--transition-fast)",
+                    }}
+                  >
+                    <span>🏛️</span>
+                    <span>Virtual Account</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod("CARD")}
+                    style={{
+                      padding: "0.55rem 0.4rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "none",
+                      backgroundColor: selectedPaymentMethod === "CARD" ? "var(--primary)" : "transparent",
+                      color: selectedPaymentMethod === "CARD" ? "#ffffff" : "var(--text-secondary)",
+                      fontWeight: 700,
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "0.2rem",
+                      transition: "all var(--transition-fast)",
+                    }}
+                  >
+                    <span>💳</span>
+                    <span>Card</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Payment Error Alert */}
+              {paymentError && (
+                <div
+                  style={{
+                    padding: "0.75rem",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid var(--accent-rose)",
+                    color: "var(--accent-rose)",
+                    fontSize: "0.8rem",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  ⚠️ {paymentError}
+                </div>
+              )}
+
+              {/* Tab 1: QRIS Payment */}
+              {selectedPaymentMethod === "EWALLET" && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  {/* Authentic QRIS Card Frame */}
+                  <div
+                    style={{
+                      width: "100%",
+                      maxWidth: "280px",
+                      backgroundColor: "#ffffff",
+                      borderRadius: "12px",
+                      overflow: "hidden",
+                      boxShadow: "0 8px 30px rgba(0, 0, 0, 0.35)",
+                      border: "2px solid #e2e8f0",
+                      marginBottom: "1rem",
+                      textAlign: "center",
+                      color: "#1e293b",
+                    }}
+                  >
+                    {/* QRIS Red Header */}
+                    <div
+                      style={{
+                        backgroundColor: "#c5161d",
+                        color: "#ffffff",
+                        padding: "0.45rem 0.75rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <div style={{ fontWeight: 900, fontSize: "1.1rem", letterSpacing: "1px" }}>QRIS</div>
+                      <div style={{ fontSize: "0.62rem", fontWeight: 700, opacity: 0.9 }}>
+                        PEMBAYARAN DIGITAL NASIONAL
+                      </div>
+                    </div>
+
+                    <div style={{ padding: "0.75rem 0.5rem 0.35rem" }}>
+                      <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#0f172a" }}>
+                        {facilityInfo?.facilityName?.toUpperCase() || "PROJECTZ FLAGSHIP STORE"}
+                      </div>
+                      <div style={{ fontSize: "0.65rem", color: "#64748b", marginTop: "0.1rem" }}>
+                        NMID: ID1020261984023 • A01
+                      </div>
+
+                      {/* QR Matrix SVG Graphic */}
+                      <div
+                        style={{
+                          margin: "0.6rem auto 0.4rem",
+                          width: "180px",
+                          height: "180px",
+                          padding: "8px",
+                          backgroundColor: "#ffffff",
+                          borderRadius: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          position: "relative",
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 100 100"
+                          style={{ width: "100%", height: "100%", shapeRendering: "crispEdges" }}
+                        >
+                          {/* Top-left Finder Pattern */}
+                          <rect x="5" y="5" width="28" height="28" fill="#0f172a" rx="2" />
+                          <rect x="9" y="9" width="20" height="20" fill="#ffffff" rx="1" />
+                          <rect x="13" y="13" width="12" height="12" fill="#0f172a" rx="1" />
+
+                          {/* Top-right Finder Pattern */}
+                          <rect x="67" y="5" width="28" height="28" fill="#0f172a" rx="2" />
+                          <rect x="71" y="9" width="20" height="20" fill="#ffffff" rx="1" />
+                          <rect x="75" y="13" width="12" height="12" fill="#0f172a" rx="1" />
+
+                          {/* Bottom-left Finder Pattern */}
+                          <rect x="5" y="67" width="28" height="28" fill="#0f172a" rx="2" />
+                          <rect x="9" y="71" width="20" height="20" fill="#ffffff" rx="1" />
+                          <rect x="13" y="75" width="12" height="12" fill="#0f172a" rx="1" />
+
+                          {/* Timing Patterns */}
+                          <rect x="36" y="9" width="4" height="4" fill="#0f172a" />
+                          <rect x="44" y="9" width="4" height="4" fill="#0f172a" />
+                          <rect x="52" y="9" width="4" height="4" fill="#0f172a" />
+                          <rect x="60" y="9" width="4" height="4" fill="#0f172a" />
+                          <rect x="9" y="36" width="4" height="4" fill="#0f172a" />
+                          <rect x="9" y="44" width="4" height="4" fill="#0f172a" />
+                          <rect x="9" y="52" width="4" height="4" fill="#0f172a" />
+                          <rect x="9" y="60" width="4" height="4" fill="#0f172a" />
+
+                          {/* Data Modules */}
+                          <rect x="37" y="20" width="4" height="8" fill="#0f172a" />
+                          <rect x="45" y="17" width="8" height="4" fill="#0f172a" />
+                          <rect x="57" y="20" width="4" height="8" fill="#0f172a" />
+                          <rect x="40" y="30" width="6" height="6" fill="#0f172a" />
+                          <rect x="54" y="32" width="6" height="4" fill="#0f172a" />
+                          <rect x="20" y="37" width="8" height="4" fill="#0f172a" />
+                          <rect x="20" y="45" width="4" height="8" fill="#0f172a" />
+                          <rect x="28" y="54" width="4" height="6" fill="#0f172a" />
+                          <rect x="68" y="37" width="6" height="8" fill="#0f172a" />
+                          <rect x="78" y="40" width="8" height="4" fill="#0f172a" />
+                          <rect x="88" y="37" width="4" height="8" fill="#0f172a" />
+                          <rect x="72" y="52" width="6" height="6" fill="#0f172a" />
+                          <rect x="82" y="50" width="8" height="4" fill="#0f172a" />
+                          <rect x="37" y="68" width="6" height="6" fill="#0f172a" />
+                          <rect x="47" y="68" width="8" height="4" fill="#0f172a" />
+                          <rect x="59" y="70" width="4" height="8" fill="#0f172a" />
+                          <rect x="40" y="78" width="8" height="4" fill="#0f172a" />
+                          <rect x="52" y="82" width="8" height="6" fill="#0f172a" />
+                          <rect x="68" y="72" width="6" height="8" fill="#0f172a" />
+                          <rect x="78" y="68" width="4" height="8" fill="#0f172a" />
+                          <rect x="86" y="74" width="6" height="6" fill="#0f172a" />
+                          <rect x="70" y="84" width="8" height="6" fill="#0f172a" />
+                          <rect x="82" y="86" width="6" height="4" fill="#0f172a" />
+
+                          {/* Center QRIS Badge */}
+                          <circle cx="50" cy="50" r="10" fill="#ffffff" stroke="#c5161d" strokeWidth="1.5" />
+                          <text
+                            x="50"
+                            y="53.5"
+                            textAnchor="middle"
+                            fontSize="7.5"
+                            fontWeight="900"
+                            fill="#c5161d"
+                          >
+                            QR
+                          </text>
+                        </svg>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          fontWeight: 800,
+                          color: "#c5161d",
+                          letterSpacing: "0.2px",
+                        }}
+                      >
+                        {formatIDR(grandTotal)}
+                      </div>
+                    </div>
+
+                    {/* Supported Wallets Footer */}
+                    <div
+                      style={{
+                        backgroundColor: "#f8fafc",
+                        borderTop: "1px solid #e2e8f0",
+                        padding: "0.45rem 0.5rem",
+                        fontSize: "0.62rem",
+                        fontWeight: 700,
+                        color: "#64748b",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.35rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>GoPay</span> • <span>OVO</span> • <span>DANA</span> • <span>ShopeePay</span> • <span>BCA</span> • <span>Livin</span>
+                    </div>
+                  </div>
+
+                  {/* Countdown Timer */}
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "var(--accent-amber)",
+                      fontWeight: 600,
+                      marginBottom: "1rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                    }}
+                  >
+                    <span>⏱️</span>
+                    <span>
+                      QR expires in {Math.floor(paymentTimer / 60)}:
+                      {(paymentTimer % 60).toString().padStart(2, "0")}
+                    </span>
+                  </div>
+
+                  {/* Simulated QRIS Payment Button */}
+                  <button
+                    id="simulate-qris-payment-btn"
+                    disabled={verifyingPayment}
+                    onClick={handleExecuteOnlinePayment}
+                    style={{
+                      width: "100%",
+                      padding: "0.85rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--accent-emerald)",
+                      color: "#ffffff",
+                      fontSize: "0.95rem",
+                      fontWeight: 800,
+                      border: "none",
+                      cursor: verifyingPayment ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+                      opacity: verifyingPayment ? 0.7 : 1,
+                    }}
+                  >
+                    {verifyingPayment ? (
+                      <>
+                        <span style={{ animation: "spin 1s linear infinite" }}>🔄</span>
+                        <span>Verifying QRIS Settlement...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡</span>
+                        <span>Simulate &amp; Confirm QRIS Payment</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Tab 2: Virtual Account */}
+              {selectedPaymentMethod === "BANK_TRANSFER" && (
+                <div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
+                    Select Your Bank:
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.4rem", marginBottom: "1rem" }}>
+                    {(["BCA", "MANDIRI", "BRI", "BNI"] as const).map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => setSelectedVaBank(b)}
+                        style={{
+                          padding: "0.5rem 0.2rem",
+                          borderRadius: "var(--radius-sm)",
+                          border: `1px solid ${selectedVaBank === b ? "var(--primary)" : "var(--border-subtle)"}`,
+                          backgroundColor: selectedVaBank === b ? "rgba(99, 102, 241, 0.15)" : "var(--bg-surface-elevated)",
+                          color: selectedVaBank === b ? "var(--primary)" : "var(--text-primary)",
+                          fontWeight: 700,
+                          fontSize: "0.78rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* VA Number Card */}
+                  <div
+                    style={{
+                      padding: "1rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-surface-elevated)",
+                      border: "1px solid var(--border-glow)",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        {selectedVaBank} Virtual Account Number:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(vaNumbers[selectedVaBank] || "");
+                          setCopiedVa(true);
+                          setTimeout(() => setCopiedVa(false), 2000);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--primary)",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {copiedVa ? "✓ Copied!" : "📋 Copy"}
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: "1.25rem",
+                        fontWeight: 800,
+                        letterSpacing: "1.5px",
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      {vaNumbers[selectedVaBank]}
+                    </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.5,
+                      marginBottom: "1.25rem",
+                      backgroundColor: "var(--bg-surface)",
+                      padding: "0.75rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "1px solid var(--border-subtle)",
+                    }}
+                  >
+                    <strong>How to transfer:</strong>
+                    <ol style={{ paddingLeft: "1.2rem", marginTop: "0.35rem", marginBottom: 0 }}>
+                      <li>Open your {selectedVaBank} Mobile Banking or ATM.</li>
+                      <li>Go to Transfer &gt; Virtual Account.</li>
+                      <li>Paste the number above and verify amount of {formatIDR(grandTotal)}.</li>
+                    </ol>
+                  </div>
+
+                  <button
+                    disabled={verifyingPayment}
+                    onClick={handleExecuteOnlinePayment}
+                    style={{
+                      width: "100%",
+                      padding: "0.85rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--primary)",
+                      color: "#ffffff",
+                      fontSize: "0.95rem",
+                      fontWeight: 800,
+                      border: "none",
+                      cursor: verifyingPayment ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
+                      opacity: verifyingPayment ? 0.7 : 1,
+                    }}
+                  >
+                    {verifyingPayment ? "Checking VA Transfer..." : "Confirm VA Transfer Completed"}
+                  </button>
+                </div>
+              )}
+
+              {/* Tab 3: Credit / Debit Card */}
+              {selectedPaymentMethod === "CARD" && (
+                <div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                    <div>
+                      <label style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Card Number:</label>
+                      <input
+                        type="text"
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value)}
+                        placeholder="4532 •••• •••• 8821"
+                        style={{
+                          width: "100%",
+                          marginTop: "0.2rem",
+                          padding: "0.55rem 0.65rem",
+                          borderRadius: "var(--radius-sm)",
+                          backgroundColor: "var(--bg-surface-elevated)",
+                          border: "1px solid var(--border-subtle)",
+                          color: "var(--text-primary)",
+                          fontSize: "0.85rem",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Valid Thru:</label>
+                        <input
+                          type="text"
+                          value={cardExpiry}
+                          onChange={(e) => setCardExpiry(e.target.value)}
+                          placeholder="MM/YY"
+                          style={{
+                            width: "100%",
+                            marginTop: "0.2rem",
+                            padding: "0.55rem 0.65rem",
+                            borderRadius: "var(--radius-sm)",
+                            backgroundColor: "var(--bg-surface-elevated)",
+                            border: "1px solid var(--border-subtle)",
+                            color: "var(--text-primary)",
+                            fontSize: "0.85rem",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>CVV / CVC:</label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          value={cardCvv}
+                          onChange={(e) => setCardCvv(e.target.value)}
+                          placeholder="•••"
+                          style={{
+                            width: "100%",
+                            marginTop: "0.2rem",
+                            padding: "0.55rem 0.65rem",
+                            borderRadius: "var(--radius-sm)",
+                            backgroundColor: "var(--bg-surface-elevated)",
+                            border: "1px solid var(--border-subtle)",
+                            color: "var(--text-primary)",
+                            fontSize: "0.85rem",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Cardholder Name:</label>
+                      <input
+                        type="text"
+                        value={cardHolder || customerName}
+                        onChange={(e) => setCardHolder(e.target.value)}
+                        placeholder="Name on card"
+                        style={{
+                          width: "100%",
+                          marginTop: "0.2rem",
+                          padding: "0.55rem 0.65rem",
+                          borderRadius: "var(--radius-sm)",
+                          backgroundColor: "var(--bg-surface-elevated)",
+                          border: "1px solid var(--border-subtle)",
+                          color: "var(--text-primary)",
+                          fontSize: "0.85rem",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      fontSize: "0.72rem",
+                      color: "var(--text-muted)",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    <span>🔒 256-bit Encrypted • Verified by Visa &amp; Mastercard ID Check</span>
+                  </div>
+
+                  <button
+                    disabled={verifyingPayment}
+                    onClick={handleExecuteOnlinePayment}
+                    style={{
+                      width: "100%",
+                      padding: "0.85rem",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--primary)",
+                      color: "#ffffff",
+                      fontSize: "0.95rem",
+                      fontWeight: 800,
+                      border: "none",
+                      cursor: verifyingPayment ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
+                      opacity: verifyingPayment ? 0.7 : 1,
+                    }}
+                  >
+                    {verifyingPayment ? "Processing Card Payment..." : `Pay ${formatIDR(grandTotal)}`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -16,6 +16,9 @@ import type {
     DailySalesSummaryResult,
     ProductSalesItemReport,
     CreateTableOrderInput,
+    PayTableOrderInput,
+    GetTableOrderStatusInput,
+    TableOrderStatusResponse,
     TableMenuResponse,
 } from "./schemas";
 
@@ -27,6 +30,12 @@ export function createPosApi(client: ApiClient) {
         },
         async createTableOrder(input: CreateTableOrderInput): Promise<ApiSuccess<SalesOrderRecord>> {
             return client.post<SalesOrderRecord>("/api/pos/table-order/create", input);
+        },
+        async payTableOrder(input: PayTableOrderInput): Promise<ApiSuccess<SalesOrderRecord>> {
+            return client.post<SalesOrderRecord>("/api/pos/table-order/pay", input);
+        },
+        async getTableOrderStatus(salesOrderId: number): Promise<ApiSuccess<TableOrderStatusResponse>> {
+            return client.get<TableOrderStatusResponse>("/api/pos/table-order/status", { salesOrderId });
         },
 
         // ── Sales Orders ──────────────────────────────────────────────────────

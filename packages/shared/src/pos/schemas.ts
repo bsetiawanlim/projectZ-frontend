@@ -76,7 +76,6 @@ export const productSalesReportSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(10).optional(),
 });
 
-// ── Table Order (Barcode / QR Code Table Self-Ordering) ──────────────────────
 export const createTableOrderSchema = z.object({
     facilityId: z.number().int().positive("Facility id must be greater than 0"),
     tableNumber: z.string().min(1, "Table number is required").max(50),
@@ -84,8 +83,32 @@ export const createTableOrderSchema = z.object({
     customerPhone: z.string().max(30).optional().nullable(),
     notes: z.string().optional().nullable(),
     items: z.array(nestedSalesOrderItemSchema).min(1, "At least one item is required in the order"),
+    paymentMethod: z.enum(["EWALLET", "BANK_TRANSFER", "CARD", "CASH"]).optional().nullable(),
+    paymentProvider: z.string().max(50).optional().nullable(),
+    referenceNumber: z.string().max(100).optional().nullable(),
+    isPaid: z.boolean().optional().default(false),
 });
 export type CreateTableOrderInput = z.infer<typeof createTableOrderSchema>;
+
+export const payTableOrderSchema = z.object({
+    salesOrderId: z.number().int().positive("Sales order id must be greater than 0"),
+    paymentMethod: z.enum(["EWALLET", "BANK_TRANSFER", "CARD", "CASH"]),
+    paymentProvider: z.string().max(50).optional().nullable(),
+    referenceNumber: z.string().max(100).optional().nullable(),
+});
+export type PayTableOrderInput = z.infer<typeof payTableOrderSchema>;
+
+export const getTableOrderStatusSchema = z.object({
+    salesOrderId: z.coerce.number().int().positive("Sales order id must be greater than 0"),
+});
+export type GetTableOrderStatusInput = z.infer<typeof getTableOrderStatusSchema>;
+
+export interface TableOrderStatusResponse {
+    order: SalesOrderRecord;
+    isPaid: boolean;
+    kitchenStatus: string;
+    status: "DRAFT" | "COMPLETED" | "VOID" | "REFUNDED";
+}
 
 export const getTableMenuSchema = z.object({
     facilityId: z.coerce.number().int().positive().optional().nullable(),
