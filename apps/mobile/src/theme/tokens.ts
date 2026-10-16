@@ -1,0 +1,31 @@
+﻿export const theme = {
+  colors: {
+    bgPrimary: "#0a0d14",
+    bgSurface: "#111622",
+    bgElevated: "#182030",
+    primary: "#6366f1",
+    primaryHover: "#4f46e5",
+    primaryGlow: "rgba(99, 102, 241, 0.35)",
+    accentEmerald: "#10b981",
+    accentCyan: "#06b6d4",
+    accentRose: "#f43f5e",
+    textPrimary: "#f8fafc",
+    textSecondary: "#94a3b8",
+    textMuted: "#64748b",
+    borderSubtle: "rgba(255, 255, 255, 0.08)",
+    borderGlow: "rgba(99, 102, 241, 0.25)",
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+  },
+  radii: {
+    sm: 6,
+    md: 10,
+    lg: 16,
+    full: 9999,
+  },
+};
