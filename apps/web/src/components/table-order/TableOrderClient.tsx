@@ -1925,7 +1925,7 @@ export function TableOrderClient() {
                     <button
                       id="midtrans-simulate-instant-settlement-btn"
                       disabled={verifyingPayment}
-                      onClick={() => handleSimulateMidtransSettlement("midtrans_snap")}
+                      onClick={() => handleSimulateMidtransSettlement("qris")}
                       style={{
                         width: "100%",
                         padding: "0.65rem",
