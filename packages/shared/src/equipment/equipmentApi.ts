@@ -10,6 +10,7 @@ import type {
     EquipmentPriceRecord,
     CreateEquipmentPriceInput,
     UpdateEquipmentPriceInput,
+    DepreciationCalculationResult,
 } from "./schemas";
 
 export function createEquipmentApi(client: ApiClient) {
@@ -19,6 +20,9 @@ export function createEquipmentApi(client: ApiClient) {
         },
         async getEquipment(id: number): Promise<ApiSuccess<EquipmentEntityRecord>> {
             return client.post<EquipmentEntityRecord>("/api/equipment/get", { id });
+        },
+        async getEquipmentDepreciation(id: number, asOfDate?: string): Promise<ApiSuccess<{ equipment: EquipmentEntityRecord; depreciation: DepreciationCalculationResult }>> {
+            return client.post<{ equipment: EquipmentEntityRecord; depreciation: DepreciationCalculationResult }>("/api/equipment/depreciation", { id, asOfDate });
         },
         async createEquipment(input: CreateEquipmentEntityInput): Promise<ApiSuccess<EquipmentEntityRecord>> {
             return client.post<EquipmentEntityRecord>("/api/equipment/create", input);

@@ -12,9 +12,10 @@ interface ViewEquipmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   equipment: EquipmentEntityRecord | null;
+  onOpenDepreciation?: (equipment: EquipmentEntityRecord) => void;
 }
 
-export function ViewEquipmentModal({ isOpen, onClose, equipment }: ViewEquipmentModalProps) {
+export function ViewEquipmentModal({ isOpen, onClose, equipment, onOpenDepreciation }: ViewEquipmentModalProps) {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen || !equipment) return null;
@@ -26,6 +27,13 @@ export function ViewEquipmentModal({ isOpen, onClose, equipment }: ViewEquipment
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  const depreciation = equipment.depreciation;
+  const unitPrice = Number(equipment.unitPrice) || 0;
+  const salvageValue = Number(equipment.salvageValue ?? 0);
+  const usefulLifeYears = equipment.usefulLifeYears ?? 5;
+  const currentNBV = depreciation?.currentBookValue ?? Math.max(salvageValue, unitPrice);
+  const accumulatedDep = depreciation?.accumulatedDepreciation ?? 0;
 
   return (
     <div
@@ -45,7 +53,9 @@ export function ViewEquipmentModal({ isOpen, onClose, equipment }: ViewEquipment
       <Card
         style={{
           width: "100%",
-          maxWidth: "560px",
+          maxWidth: "580px",
+          maxHeight: "90vh",
+          overflowY: "auto",
           backgroundColor: "var(--bg-surface)",
           border: "1px solid var(--border-glow)",
           borderRadius: "var(--radius-lg)",
@@ -139,7 +149,7 @@ export function ViewEquipmentModal({ isOpen, onClose, equipment }: ViewEquipment
 
           <div>
             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-              Valuation / Unit Price
+              Acquisition Cost
             </span>
             <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent-emerald)", marginTop: "0.2rem" }}>
               {formatIDR(equipment.unitPrice)}
@@ -163,6 +173,86 @@ export function ViewEquipmentModal({ isOpen, onClose, equipment }: ViewEquipment
               {equipment.model?.name || "—"}
             </div>
           </div>
+        </div>
+
+        {/* Depreciation Metrics Card */}
+        <div
+          style={{
+            backgroundColor: "rgba(245, 158, 11, 0.05)",
+            border: "1px solid rgba(245, 158, 11, 0.2)",
+            borderRadius: "var(--radius-md)",
+            padding: "1rem",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--accent-amber)" }}>
+              📉 Depreciation & Book Value
+            </span>
+            <Badge variant="warning">
+              {equipment.depreciationMethod === "DOUBLE_DECLINING" ? "Double Declining" : "Straight-Line"}
+            </Badge>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                Current Net Book Value
+              </span>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--accent-emerald)", marginTop: "0.15rem" }}>
+                {formatIDR(currentNBV)}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                Accumulated Depreciation
+              </span>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--accent-rose)", marginTop: "0.15rem" }}>
+                {formatIDR(accumulatedDep)}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                Salvage Value
+              </span>
+              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                {formatIDR(salvageValue)}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                Useful Life
+              </span>
+              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                {usefulLifeYears} Years {equipment.acquisitionDate ? `(Acquired ${new Date(equipment.acquisitionDate).toLocaleDateString()})` : ""}
+              </div>
+            </div>
+          </div>
+
+          {onOpenDepreciation && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                onClose();
+                onOpenDepreciation(equipment);
+              }}
+              style={{
+                width: "100%",
+                borderColor: "rgba(245, 158, 11, 0.4)",
+                color: "var(--accent-amber)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.4rem",
+              }}
+            >
+              <span>📊 View Full Amortization Schedule</span>
+            </Button>
+          )}
         </div>
 
         {/* Description / Notes */}
@@ -214,8 +304,6 @@ export function ViewEquipmentModal({ isOpen, onClose, equipment }: ViewEquipment
             </div>
           </div>
         )}
-
-
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button variant="secondary" onClick={onClose}>

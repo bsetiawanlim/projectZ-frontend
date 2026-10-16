@@ -13,6 +13,7 @@ import { AddEquipmentModal } from "@/components/equipment/AddEquipmentModal";
 import { EditEquipmentModal } from "@/components/equipment/EditEquipmentModal";
 import { ViewEquipmentModal } from "@/components/equipment/ViewEquipmentModal";
 import { EquipmentPriceModal } from "@/components/equipment/EquipmentPriceModal";
+import { EquipmentDepreciationModal } from "@/components/equipment/EquipmentDepreciationModal";
 import type { EquipmentEntityRecord } from "@pz/shared";
 
 export default function EquipmentPage() {
@@ -39,6 +40,7 @@ export default function EquipmentPage() {
   const [viewingEquipment, setViewingEquipment] = useState<EquipmentEntityRecord | null>(null);
   const [editingEquipment, setEditingEquipment] = useState<EquipmentEntityRecord | null>(null);
   const [pricingEquipment, setPricingEquipment] = useState<EquipmentEntityRecord | null>(null);
+  const [depreciatingEquipment, setDepreciatingEquipment] = useState<EquipmentEntityRecord | null>(null);
 
 
   const canCreate = Boolean(
@@ -120,6 +122,24 @@ export default function EquipmentPage() {
     return equipmentList.reduce((acc, eq) => acc + (Number(eq.unitPrice) || 0), 0);
   }, [equipmentList]);
 
+  const totalNetBookValue = useMemo(() => {
+    return equipmentList.reduce((acc, eq) => {
+      const nbv = eq.depreciation?.currentBookValue !== undefined
+        ? Number(eq.depreciation.currentBookValue)
+        : Number(eq.unitPrice) || 0;
+      return acc + nbv;
+    }, 0);
+  }, [equipmentList]);
+
+  const totalAccumulatedDepreciation = useMemo(() => {
+    return equipmentList.reduce((acc, eq) => {
+      const dep = eq.depreciation?.accumulatedDepreciation !== undefined
+        ? Number(eq.depreciation.accumulatedDepreciation)
+        : 0;
+      return acc + dep;
+    }, 0);
+  }, [equipmentList]);
+
   const brandCount = useMemo(() => {
     const brands = new Set(
       equipmentList.map((eq) => eq.brand?.name).filter(Boolean)
@@ -157,7 +177,7 @@ export default function EquipmentPage() {
             <Badge variant="warning">Assets & Fleet</Badge>
           </div>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.875rem", marginTop: "0.2rem" }}>
-            Master registry of operational machinery, vehicles, industrial tools, and capital asset valuations
+            Master registry of operational machinery, vehicles, industrial tools, capital valuations, and depreciation schedules
           </p>
         </div>
         {canCreate && (
@@ -177,7 +197,7 @@ export default function EquipmentPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
           gap: "1rem",
         }}
       >
@@ -195,13 +215,37 @@ export default function EquipmentPage() {
 
         <Card style={{ padding: "1rem 1.25rem" }}>
           <p style={{ fontSize: "0.75rem", color: "var(--accent-amber)", textTransform: "uppercase" }}>
-            Total Asset Valuation
+            Cost Basis (Valuation)
           </p>
-          <p style={{ fontSize: "1.2rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--accent-amber)" }}>
+          <p style={{ fontSize: "1.15rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--accent-amber)" }}>
             {loading ? "—" : formatIDR(totalAssetValuation)}
           </p>
           <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-            Combined physical asset value
+            Initial capital expenditure
+          </span>
+        </Card>
+
+        <Card style={{ padding: "1rem 1.25rem" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", textTransform: "uppercase", fontWeight: 600 }}>
+            Current Net Book Value
+          </p>
+          <p style={{ fontSize: "1.15rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--accent-emerald)" }}>
+            {loading ? "—" : formatIDR(totalNetBookValue)}
+          </p>
+          <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+            Current net asset balance
+          </span>
+        </Card>
+
+        <Card style={{ padding: "1rem 1.25rem" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--accent-rose)", textTransform: "uppercase", fontWeight: 600 }}>
+            Accumulated Depreciation
+          </p>
+          <p style={{ fontSize: "1.15rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--accent-rose)" }}>
+            {loading ? "—" : formatIDR(totalAccumulatedDepreciation)}
+          </p>
+          <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+            Total amortized capital
           </span>
         </Card>
 
@@ -214,18 +258,6 @@ export default function EquipmentPage() {
           </p>
           <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
             Equipment makers represented
-          </span>
-        </Card>
-
-        <Card style={{ padding: "1rem 1.25rem" }}>
-          <p style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", textTransform: "uppercase" }}>
-            Fleet Readiness
-          </p>
-          <p style={{ fontSize: "1.4rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--accent-emerald)" }}>
-            {loading ? "—" : `${equipmentList.length} Active`}
-          </p>
-          <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-            Operational units deployed
           </span>
         </Card>
       </div>
@@ -311,7 +343,7 @@ export default function EquipmentPage() {
                     Brand & Model
                   </SortableTh>
                   <SortableTh field="valuation" currentSortField={sortField} currentSortOrder={sortOrder} onSort={handleSort} style={{ padding: "0.85rem 1.25rem" }}>
-                    Asset Valuation
+                    Cost & Book Value
                   </SortableTh>
                   <SortableTh field="specs" currentSortField={sortField} currentSortOrder={sortOrder} onSort={handleSort} style={{ padding: "0.85rem 1.25rem" }}>
                     Specs / Notes
@@ -371,9 +403,14 @@ export default function EquipmentPage() {
                       </div>
                     </td>
 
-                    {/* Asset Valuation */}
-                    <td style={{ padding: "0.9rem 1.25rem", fontWeight: 600, color: "var(--accent-emerald)" }}>
-                      {formatIDR(eq.unitPrice)}
+                    {/* Asset Valuation & Book Value */}
+                    <td style={{ padding: "0.9rem 1.25rem" }}>
+                      <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                        {formatIDR(eq.unitPrice)}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", fontWeight: 500, marginTop: "0.15rem" }}>
+                        NBV: {formatIDR(eq.depreciation?.currentBookValue ?? eq.unitPrice)}
+                      </div>
                     </td>
 
                     {/* Specs / Notes */}
@@ -395,6 +432,19 @@ export default function EquipmentPage() {
                     {/* Actions */}
                     <td style={{ padding: "0.9rem 1.25rem", textAlign: "right" }}>
                       <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                        <Button
+                          id={`depreciation-equipment-btn-${eq.id}`}
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setDepreciatingEquipment(eq)}
+                          title="View depreciation & amortization schedule"
+                          style={{
+                            borderColor: "rgba(245, 158, 11, 0.4)",
+                            color: "var(--accent-amber)",
+                          }}
+                        >
+                          📉 Depreciation
+                        </Button>
                         <Button
                           id={`price-equipment-btn-${eq.id}`}
                           size="sm"
@@ -463,6 +513,7 @@ export default function EquipmentPage() {
         isOpen={!!viewingEquipment}
         onClose={() => setViewingEquipment(null)}
         equipment={viewingEquipment}
+        onOpenDepreciation={(eq) => setDepreciatingEquipment(eq)}
       />
 
       {/* Edit Equipment Modal */}
@@ -481,6 +532,17 @@ export default function EquipmentPage() {
         isOpen={!!pricingEquipment}
         onClose={() => setPricingEquipment(null)}
         equipment={pricingEquipment}
+      />
+
+      {/* Equipment Depreciation Schedule Modal */}
+      <EquipmentDepreciationModal
+        isOpen={!!depreciatingEquipment}
+        onClose={() => setDepreciatingEquipment(null)}
+        equipment={depreciatingEquipment}
+        onEquipmentUpdated={(updated) => {
+          loadEquipment();
+          setDepreciatingEquipment(updated);
+        }}
       />
     </div>
   );

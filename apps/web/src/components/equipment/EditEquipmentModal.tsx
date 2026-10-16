@@ -27,6 +27,11 @@ export function EditEquipmentModal({
   const [brandId, setBrandId] = useState<number | undefined>(undefined);
   const [brands, setBrands] = useState<EquipmentBrandRecord[]>([]);
 
+  const [salvageValue, setSalvageValue] = useState<number>(0);
+  const [usefulLifeYears, setUsefulLifeYears] = useState<number>(5);
+  const [depreciationMethod, setDepreciationMethod] = useState<"STRAIGHT_LINE" | "DOUBLE_DECLINING">("STRAIGHT_LINE");
+  const [acquisitionDate, setAcquisitionDate] = useState<string>("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +42,16 @@ export function EditEquipmentModal({
       setUnitPrice(Number(equipment.unitPrice) || 0);
       setDescription(equipment.description || "");
       setBrandId(equipment.brandId || equipment.brand?.id || undefined);
+      setSalvageValue(Number(equipment.salvageValue ?? 0));
+      setUsefulLifeYears(Number(equipment.usefulLifeYears ?? 5));
+      setDepreciationMethod((equipment.depreciationMethod as any) || "STRAIGHT_LINE");
+      setAcquisitionDate(
+        equipment.acquisitionDate
+          ? new Date(equipment.acquisitionDate).toISOString().slice(0, 10)
+          : equipment.createdAt
+          ? new Date(equipment.createdAt).toISOString().slice(0, 10)
+          : new Date().toISOString().slice(0, 10)
+      );
       setError(null);
 
       // Load available brands
@@ -75,6 +90,10 @@ export function EditEquipmentModal({
         unitPrice: Number(unitPrice),
         description: description.trim() || undefined,
         brandId: brandId ? Number(brandId) : undefined,
+        salvageValue: Number(salvageValue) || 0,
+        usefulLifeYears: Number(usefulLifeYears) || 5,
+        depreciationMethod: depreciationMethod,
+        acquisitionDate: acquisitionDate ? new Date(acquisitionDate).toISOString() : undefined,
       });
 
       const updated = (res as any)?.data ?? res;
@@ -111,7 +130,9 @@ export function EditEquipmentModal({
       <Card
         style={{
           width: "100%",
-          maxWidth: "540px",
+          maxWidth: "560px",
+          maxHeight: "90vh",
+          overflowY: "auto",
           backgroundColor: "var(--bg-surface)",
           border: "1px solid var(--border-glow)",
           borderRadius: "var(--radius-lg)",
@@ -257,6 +278,108 @@ export function EditEquipmentModal({
                 fontFamily: "inherit",
               }}
             />
+          </div>
+
+          {/* Depreciation Policy Section */}
+          <div
+            style={{
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "var(--radius-md)",
+              padding: "1rem",
+              backgroundColor: "rgba(255, 255, 255, 0.02)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.85rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--accent-amber)" }}>
+                📉 Asset Depreciation & Amortization
+              </span>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                Accounting parameters
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Salvage / Scrap Value (IDR)
+                </label>
+                <Input
+                  id="edit-equipment-salvage-input"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={salvageValue || ""}
+                  placeholder="0"
+                  onChange={(e) => setSalvageValue(Number(e.target.value))}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Useful Life (Years)
+                </label>
+                <Input
+                  id="edit-equipment-life-input"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={usefulLifeYears || ""}
+                  placeholder="5"
+                  onChange={(e) => setUsefulLifeYears(Number(e.target.value))}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Depreciation Method
+                </label>
+                <select
+                  id="edit-equipment-method-select"
+                  value={depreciationMethod}
+                  onChange={(e) => setDepreciationMethod(e.target.value as any)}
+                  style={{
+                    width: "100%",
+                    padding: "0.6rem 0.85rem",
+                    backgroundColor: "var(--bg-surface-elevated)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    fontSize: "0.85rem",
+                    outline: "none",
+                  }}
+                >
+                  <option value="STRAIGHT_LINE">Straight-Line (Default)</option>
+                  <option value="DOUBLE_DECLINING">Double Declining Balance</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Acquisition Date
+                </label>
+                <input
+                  id="edit-equipment-acq-date"
+                  type="date"
+                  value={acquisitionDate}
+                  onChange={(e) => setAcquisitionDate(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.55rem 0.85rem",
+                    backgroundColor: "var(--bg-surface-elevated)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    fontSize: "0.85rem",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Footer Actions */}

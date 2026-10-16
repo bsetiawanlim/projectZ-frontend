@@ -21,6 +21,11 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
   const [brandId, setBrandId] = useState<number | undefined>(undefined);
   const [brands, setBrands] = useState<EquipmentBrandRecord[]>([]);
 
+  const [salvageValue, setSalvageValue] = useState<number>(0);
+  const [usefulLifeYears, setUsefulLifeYears] = useState<number>(5);
+  const [depreciationMethod, setDepreciationMethod] = useState<"STRAIGHT_LINE" | "DOUBLE_DECLINING">("STRAIGHT_LINE");
+  const [acquisitionDate, setAcquisitionDate] = useState<string>(new Date().toISOString().slice(0, 10));
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +36,10 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
       setUnitPrice(0);
       setDescription("");
       setBrandId(undefined);
+      setSalvageValue(0);
+      setUsefulLifeYears(5);
+      setDepreciationMethod("STRAIGHT_LINE");
+      setAcquisitionDate(new Date().toISOString().slice(0, 10));
       setError(null);
 
       // Load available brands
@@ -68,6 +77,10 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
         unitPrice: Number(unitPrice),
         description: description.trim() || undefined,
         brandId: brandId ? Number(brandId) : undefined,
+        salvageValue: Number(salvageValue) || 0,
+        usefulLifeYears: Number(usefulLifeYears) || 5,
+        depreciationMethod: depreciationMethod,
+        acquisitionDate: acquisitionDate ? new Date(acquisitionDate).toISOString() : undefined,
       });
 
       const newEquipment = (res as any)?.data ?? res;
@@ -81,6 +94,10 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
       setLoading(false);
     }
   };
+
+  const depreciableBase = Math.max(0, (Number(unitPrice) || 0) - (Number(salvageValue) || 0));
+  const estAnnualDep = usefulLifeYears > 0 ? depreciableBase / usefulLifeYears : 0;
+  const estMonthlyDep = estAnnualDep / 12;
 
   return (
     <div
@@ -100,7 +117,9 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
       <Card
         style={{
           width: "100%",
-          maxWidth: "520px",
+          maxWidth: "560px",
+          maxHeight: "90vh",
+          overflowY: "auto",
           backgroundColor: "var(--bg-surface)",
           border: "1px solid var(--border-glow)",
           borderRadius: "var(--radius-lg)",
@@ -177,7 +196,7 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
 
             <div>
               <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.35rem" }}>
-                Unit Value (IDR) *
+                Acquisition Cost (IDR) *
               </label>
               <Input
                 id="equipment-price-input"
@@ -233,6 +252,131 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
             />
           </div>
 
+          {/* Depreciation Policy Section */}
+          <div
+            style={{
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "var(--radius-md)",
+              padding: "1rem",
+              backgroundColor: "rgba(255, 255, 255, 0.02)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.85rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--accent-amber)" }}>
+                📉 Asset Depreciation & Amortization
+              </span>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                Accounting parameters
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Salvage / Scrap Value (IDR)
+                </label>
+                <Input
+                  id="equipment-salvage-input"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={salvageValue || ""}
+                  placeholder="0"
+                  onChange={(e) => setSalvageValue(Number(e.target.value))}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Useful Life (Years)
+                </label>
+                <Input
+                  id="equipment-life-input"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={usefulLifeYears || ""}
+                  placeholder="5"
+                  onChange={(e) => setUsefulLifeYears(Number(e.target.value))}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Depreciation Method
+                </label>
+                <select
+                  id="equipment-method-select"
+                  value={depreciationMethod}
+                  onChange={(e) => setDepreciationMethod(e.target.value as any)}
+                  style={{
+                    width: "100%",
+                    padding: "0.6rem 0.85rem",
+                    backgroundColor: "var(--bg-surface-elevated)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    fontSize: "0.85rem",
+                    outline: "none",
+                  }}
+                >
+                  <option value="STRAIGHT_LINE">Straight-Line (Default)</option>
+                  <option value="DOUBLE_DECLINING">Double Declining Balance</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>
+                  Acquisition Date
+                </label>
+                <input
+                  id="equipment-acq-date"
+                  type="date"
+                  value={acquisitionDate}
+                  onChange={(e) => setAcquisitionDate(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.55rem 0.85rem",
+                    backgroundColor: "var(--bg-surface-elevated)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    fontSize: "0.85rem",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Quick Math Preview */}
+            {unitPrice > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "0.5rem",
+                  padding: "0.65rem 0.85rem",
+                  backgroundColor: "rgba(245, 158, 11, 0.08)",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "0.75rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <div>
+                  Est. Annual Dep: <strong style={{ color: "var(--accent-amber)" }}>Rp {Math.round(estAnnualDep).toLocaleString("id-ID")}</strong>
+                </div>
+                <div>
+                  Est. Monthly Dep: <strong style={{ color: "var(--accent-cyan)" }}>Rp {Math.round(estMonthlyDep).toLocaleString("id-ID")}</strong>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.75rem" }}>
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
@@ -246,3 +390,4 @@ export function AddEquipmentModal({ isOpen, onClose, onEquipmentCreated }: AddEq
     </div>
   );
 }
+
