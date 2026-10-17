@@ -9,10 +9,12 @@ import { productApi } from "@/lib/api";
 import { AddProductModal } from "@/components/products/AddProductModal";
 import { TableQrModal } from "./TableQrModal";
 import { useAuth } from "@/lib/authContext";
+import { useDevice } from "@/lib/useDevice";
 import { cartStore, formatIDR, type ProductItem, type ProductCategoryItem } from "@pz/shared";
 
 export function ProductPicker() {
   const { user, canAccess } = useAuth();
+  const device = useDevice();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<ProductCategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -97,23 +99,25 @@ export function ProductPicker() {
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%" }}>
       {/* Search & New Product Action */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
           <Input
             id="pos-product-search-input"
-            placeholder="Search by product name, SKU, or scan barcode (F2)..."
+            placeholder={device.isSmallScreen ? "Search products..." : "Search by product name, SKU, or scan barcode (F2)..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
               backgroundColor: "var(--bg-surface-elevated)",
               border: "1px solid var(--border-glow)",
-              fontSize: "1rem",
-              padding: "0.75rem 1rem",
+              fontSize: device.isSmallScreen ? "0.85rem" : "1rem",
+              padding: device.isSmallScreen ? "0.45rem 0.75rem" : "0.75rem 1rem",
+              flex: 1,
+              minWidth: "160px",
             }}
           />
           {canCreateProduct && (
             <Button
               id="pos-add-product-quick-btn"
-              size="md"
+              size={device.isSmallScreen ? "sm" : "md"}
               onClick={() => setIsAddProductModalOpen(true)}
               style={{ whiteSpace: "nowrap", flexShrink: 0 }}
             >
@@ -123,7 +127,7 @@ export function ProductPicker() {
           <Button
             id="pos-table-qr-btn"
             variant="secondary"
-            size="md"
+            size={device.isSmallScreen ? "sm" : "md"}
             onClick={() => setIsTableQrOpen(true)}
             style={{ whiteSpace: "nowrap", flexShrink: 0 }}
             title="Generate & print table QR codes"
@@ -191,8 +195,8 @@ export function ProductPicker() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-              gap: "0.85rem",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(145px, 100%), 1fr))",
+              gap: device.isSmallScreen ? "0.55rem" : "0.85rem",
             }}
           >
             {filteredProducts.map((p) => {
@@ -256,7 +260,7 @@ export function ProductPicker() {
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
-                    padding: "0.85rem",
+                    padding: device.isSmallScreen ? "0.6rem" : "0.85rem",
                     cursor: canSell ? "pointer" : "not-allowed",
                     opacity: canSell ? 1 : 0.6,
                     backgroundColor: "var(--bg-surface)",
@@ -271,7 +275,7 @@ export function ProductPicker() {
                     <div
                       style={{
                         width: "100%",
-                        height: "120px",
+                        height: device.isSmallScreen ? "85px" : "120px",
                         borderRadius: "var(--radius-md, 8px)",
                         overflow: "hidden",
                         backgroundColor: "var(--bg-surface-elevated, rgba(255,255,255,0.05))",

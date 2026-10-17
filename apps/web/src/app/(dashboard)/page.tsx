@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/lib/authContext";
 import { ALL_DASHBOARD_MODULES } from "@/lib/permissions";
+import { useDevice } from "@/lib/useDevice";
 import { productApi, customerApi, employeeApi, vendorApi, userApi, profileApi, equipmentApi, orderApi } from "@/lib/api";
 
 interface ModuleStats {
@@ -26,6 +27,7 @@ interface ModuleStats {
 
 export default function DashboardHomePage() {
   const { user, role, canAccess } = useAuth();
+  const device = useDevice();
   const [stats, setStats] = useState<ModuleStats>({});
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -264,7 +266,7 @@ export default function DashboardHomePage() {
       <div
         style={{
           position: "relative",
-          padding: "2rem 2.25rem",
+          padding: device.isSmallScreen ? "1.25rem 1rem" : "2rem 2.25rem",
           borderRadius: "var(--radius-lg)",
           background: user?.isSuperAdmin
             ? "linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(245, 158, 11, 0.12) 100%)"
@@ -284,7 +286,14 @@ export default function DashboardHomePage() {
               <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{currentDate}</span>
             </div>
 
-            <h2 style={{ fontSize: "1.85rem", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+            <h2
+              style={{
+                fontSize: device.isSmallScreen ? "1.35rem" : "1.85rem",
+                fontWeight: 800,
+                color: "var(--text-primary)",
+                letterSpacing: "-0.02em",
+              }}
+            >
               Welcome back, {user?.name || user?.email?.split("@")[0]}!
             </h2>
             <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", marginTop: "0.35rem", maxWidth: "680px" }}>
@@ -324,8 +333,8 @@ export default function DashboardHomePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "1rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
+              gap: device.isSmallScreen ? "0.75rem" : "1rem",
             }}
           >
             {canViewPOS && (
@@ -565,15 +574,15 @@ export default function DashboardHomePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "1.25rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
+              gap: device.isSmallScreen ? "0.85rem" : "1.25rem",
             }}
           >
             {authorizedModules.map((mod) => (
               <Link key={mod.id} href={mod.href} style={{ textDecoration: "none" }}>
                 <Card
                   style={{
-                    padding: "1.5rem",
+                    padding: device.isSmallScreen ? "1rem" : "1.5rem",
                     height: "100%",
                     display: "flex",
                     flexDirection: "column",

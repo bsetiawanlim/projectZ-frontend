@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { posApi } from "@/lib/api";
+import { useDevice } from "@/lib/useDevice";
 import {
   formatIDR,
   type TableMenuItem,
@@ -53,6 +54,11 @@ export function TableOrderClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Device & responsive menu density detection
+  const device = useDevice();
+  const [manualMenuDensity, setManualMenuDensity] = useState<"compact" | "detailed" | null>(null);
+  const isCompactMenu = manualMenuDensity !== null ? manualMenuDensity === "compact" : device.compactMenuPreferred;
 
   // In-session cart
   const [cart, setCart] = useState<CartOrderItem[]>([]);
@@ -749,134 +755,213 @@ export function TableOrderClient() {
               )}
             </div>
 
-            {/* Static Read-Only Table Badge (Cannot be changed or edited) */}
-            <div
-              id="table-number-badge"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                padding: "0.4rem 0.85rem",
-                borderRadius: "var(--radius-full)",
-                backgroundColor: "rgba(99, 102, 241, 0.18)",
-                border: "1px solid var(--border-glow)",
-                color: "var(--primary)",
-                fontSize: "0.85rem",
-                fontWeight: 800,
-                whiteSpace: "nowrap",
-                userSelect: "none",
-              }}
-              title="Table number is fixed to this table barcode"
-            >
-              <span>🪑</span>
-              <span>Table {tableNumber}</span>
+            {/* Static Read-Only Table Badge & Responsive Density Toggle */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <button
+                id="toggle-menu-density-btn"
+                onClick={() => setManualMenuDensity(isCompactMenu ? "detailed" : "compact")}
+                title={isCompactMenu ? "Switch to Detailed Menu" : "Switch to Compact Menu"}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  padding: isCompactMenu ? "0.3rem 0.6rem" : "0.35rem 0.75rem",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: isCompactMenu ? "rgba(99, 102, 241, 0.2)" : "var(--bg-surface-elevated)",
+                  border: isCompactMenu ? "1px solid var(--border-glow)" : "1px solid var(--border-subtle)",
+                  color: isCompactMenu ? "var(--primary)" : "var(--text-secondary)",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all var(--transition-fast)",
+                }}
+              >
+                <span>{isCompactMenu ? "📱 Compact" : "📑 Detailed"}</span>
+              </button>
+
+              <div
+                id="table-number-badge"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: isCompactMenu ? "0.3rem 0.65rem" : "0.4rem 0.85rem",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "rgba(99, 102, 241, 0.18)",
+                  border: "1px solid var(--border-glow)",
+                  color: "var(--primary)",
+                  fontSize: isCompactMenu ? "0.78rem" : "0.85rem",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                  userSelect: "none",
+                }}
+                title="Table number is fixed to this table barcode"
+              >
+                <span>🪑</span>
+                <span>Table {tableNumber}</span>
+              </div>
             </div>
           </div>
 
-          {/* Quick Search Bar */}
-          <div style={{ marginTop: "0.75rem", position: "relative" }}>
-            <input
-              id="table-search-input"
-              type="text"
-              placeholder="Search dishes, drinks, desserts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+          {/* Menu Category Dropdown & Quick Search Bar */}
+          <div
+            style={{
+              marginTop: isCompactMenu ? "0.6rem" : "0.75rem",
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {/* Category Dropdown List */}
+            <div style={{ position: "relative", flex: "1 1 180px", minWidth: "150px" }}>
+              <select
+                id="table-category-select"
+                value={selectedCategory === null ? "ALL" : selectedCategory}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedCategory(val === "ALL" ? null : Number(val));
+                }}
+                style={{
+                  width: "100%",
+                  height: isCompactMenu ? "36px" : "40px",
+                  padding: "0 2rem 0 0.85rem",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--bg-surface-elevated)",
+                  border: selectedCategory !== null ? "1px solid var(--border-glow)" : "1px solid var(--border-subtle)",
+                  color: selectedCategory !== null ? "var(--primary)" : "var(--text-primary)",
+                  fontSize: isCompactMenu ? "0.8rem" : "0.85rem",
+                  fontWeight: 600,
+                  outline: "none",
+                  cursor: "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                }}
+              >
+                <option value="ALL">🍽️ All Items ({products.length})</option>
+                {categories.map((cat) => {
+                  const count = products.filter((p) => p.categoryId === cat.id).length;
+                  return (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+              <span
+                style={{
+                  position: "absolute",
+                  right: "0.85rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  fontSize: "0.7rem",
+                  color: "var(--text-muted)",
+                }}
+              >
+                ▼
+              </span>
+            </div>
+
+            {/* Quick Search Bar */}
+            <div style={{ position: "relative", flex: "2 1 200px", minWidth: "160px" }}>
+              <input
+                id="table-search-input"
+                type="text"
+                placeholder="Search dishes, drinks, desserts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: "100%",
+                  height: isCompactMenu ? "36px" : "40px",
+                  padding: "0 2rem 0 2.2rem",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--bg-surface-elevated)",
+                  border: "1px solid var(--border-subtle)",
+                  color: "var(--text-primary)",
+                  fontSize: isCompactMenu ? "0.8rem" : "0.85rem",
+                  outline: "none",
+                }}
+              />
+              <span
+                style={{
+                  position: "absolute",
+                  left: "0.75rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  fontSize: "0.85rem",
+                  color: "var(--text-muted)",
+                }}
+              >
+                🔍
+              </span>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  style={{
+                    position: "absolute",
+                    right: "0.75rem",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Active Category Filter Tag if selected */}
+          {selectedCategory !== null && (
+            <div
               style={{
-                width: "100%",
-                padding: "0.55rem 0.85rem 0.55rem 2.2rem",
-                borderRadius: "var(--radius-full)",
-                backgroundColor: "var(--bg-surface-elevated)",
-                border: "1px solid var(--border-subtle)",
-                color: "var(--text-primary)",
-                fontSize: "0.85rem",
-                outline: "none",
-              }}
-            />
-            <span
-              style={{
-                position: "absolute",
-                left: "0.75rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-                fontSize: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                marginTop: "0.45rem",
+                fontSize: "0.75rem",
                 color: "var(--text-muted)",
               }}
             >
-              🔍
-            </span>
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
+              <span>Category:</span>
+              <span
                 style={{
-                  position: "absolute",
-                  right: "0.75rem",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.15rem 0.55rem",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "rgba(99, 102, 241, 0.15)",
+                  color: "var(--primary)",
+                  border: "1px solid var(--border-glow)",
+                  fontWeight: 600,
+                  fontSize: "0.75rem",
                 }}
               >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Horizontal Category Carousel */}
-          <div
-            style={{
-              display: "flex",
-              gap: "0.45rem",
-              overflowX: "auto",
-              paddingTop: "0.75rem",
-              paddingBottom: "0.2rem",
-              scrollbarWidth: "none",
-            }}
-          >
-            <button
-              onClick={() => setSelectedCategory(null)}
-              style={{
-                padding: "0.35rem 0.85rem",
-                borderRadius: "var(--radius-full)",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-                border: "1px solid transparent",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                backgroundColor: selectedCategory === null ? "var(--primary)" : "var(--bg-surface-elevated)",
-                color: selectedCategory === null ? "#ffffff" : "var(--text-secondary)",
-                transition: "all var(--transition-fast)",
-              }}
-            >
-              All Items ({products.length})
-            </button>
-            {categories.map((cat) => {
-              const active = selectedCategory === cat.id;
-              const count = products.filter((p) => p.categoryId === cat.id).length;
-              return (
+                {categories.find((c) => c.id === selectedCategory)?.name || "Category"}
                 <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
+                  onClick={() => setSelectedCategory(null)}
+                  title="Clear category filter"
                   style={{
-                    padding: "0.35rem 0.85rem",
-                    borderRadius: "var(--radius-full)",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    border: "1px solid transparent",
+                    background: "none",
+                    border: "none",
+                    color: "var(--primary)",
                     cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    backgroundColor: active ? "var(--primary)" : "var(--bg-surface-elevated)",
-                    color: active ? "#ffffff" : "var(--text-secondary)",
-                    transition: "all var(--transition-fast)",
+                    fontSize: "0.75rem",
+                    padding: 0,
+                    lineHeight: 1,
                   }}
                 >
-                  {cat.name} ({count})
+                  ✕
                 </button>
-              );
-            })}
-          </div>
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -928,25 +1013,25 @@ export function TableOrderClient() {
                   key={product.id}
                   style={{
                     backgroundColor: "var(--bg-surface)",
-                    borderRadius: "var(--radius-lg)",
+                    borderRadius: isCompactMenu ? "var(--radius-md)" : "var(--radius-lg)",
                     border: qty > 0 ? "1px solid var(--border-glow)" : "1px solid var(--border-subtle)",
-                    padding: "1rem",
+                    padding: isCompactMenu ? "0.65rem 0.85rem" : "1rem",
                     display: "flex",
                     justifyContent: "space-between",
-                    gap: "1rem",
+                    gap: isCompactMenu ? "0.65rem" : "1rem",
                     alignItems: "center",
                     boxShadow: qty > 0 ? "0 4px 20px -6px rgba(99, 102, 241, 0.25)" : "none",
                     transition: "all var(--transition-fast)",
                   }}
                 >
                   {/* Left Column: Product Info */}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
                       <span
                         style={{
-                          fontSize: "0.7rem",
+                          fontSize: isCompactMenu ? "0.65rem" : "0.7rem",
                           fontWeight: 700,
-                          padding: "0.1rem 0.4rem",
+                          padding: "0.08rem 0.35rem",
                           borderRadius: "var(--radius-sm)",
                           backgroundColor: "rgba(255, 255, 255, 0.06)",
                           color: "var(--text-muted)",
@@ -956,7 +1041,7 @@ export function TableOrderClient() {
                         {product.categoryName}
                       </span>
                       {product.unitLabel && (
-                        <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                        <span style={{ fontSize: isCompactMenu ? "0.65rem" : "0.7rem", color: "var(--text-muted)" }}>
                           • {product.unitLabel}
                         </span>
                       )}
@@ -964,10 +1049,11 @@ export function TableOrderClient() {
 
                     <h3
                       style={{
-                        fontSize: "1rem",
+                        fontSize: isCompactMenu ? "0.92rem" : "1rem",
                         fontWeight: 700,
                         color: "var(--text-primary)",
-                        marginTop: "0.3rem",
+                        marginTop: isCompactMenu ? "0.15rem" : "0.3rem",
+                        lineHeight: 1.25,
                       }}
                     >
                       {product.name}
@@ -976,12 +1062,12 @@ export function TableOrderClient() {
                     {product.description && (
                       <p
                         style={{
-                          fontSize: "0.8rem",
+                          fontSize: isCompactMenu ? "0.75rem" : "0.8rem",
                           color: "var(--text-secondary)",
-                          marginTop: "0.2rem",
-                          lineHeight: 1.35,
+                          marginTop: "0.15rem",
+                          lineHeight: 1.3,
                           display: "-webkit-box",
-                          WebkitLineClamp: 2,
+                          WebkitLineClamp: isCompactMenu ? 1 : 2,
                           WebkitBoxOrient: "vertical",
                           overflow: "hidden",
                         }}
@@ -992,10 +1078,10 @@ export function TableOrderClient() {
 
                     <div
                       style={{
-                        fontSize: "0.95rem",
+                        fontSize: isCompactMenu ? "0.88rem" : "0.95rem",
                         fontWeight: 800,
                         color: "var(--accent-emerald)",
-                        marginTop: "0.4rem",
+                        marginTop: isCompactMenu ? "0.25rem" : "0.4rem",
                       }}
                     >
                       {formatIDR(product.price)}
@@ -1003,14 +1089,14 @@ export function TableOrderClient() {
 
                     {/* Note indicator / button if in cart */}
                     {qty > 0 && (
-                      <div style={{ marginTop: "0.4rem" }}>
+                      <div style={{ marginTop: "0.3rem" }}>
                         <button
                           onClick={() => setEditingItemNote({ productId: product.id, note })}
                           style={{
                             background: "none",
                             border: "none",
                             color: note ? "var(--accent-amber)" : "var(--primary)",
-                            fontSize: "0.75rem",
+                            fontSize: "0.72rem",
                             fontWeight: 600,
                             cursor: "pointer",
                             padding: 0,
@@ -1020,7 +1106,7 @@ export function TableOrderClient() {
                           }}
                         >
                           <span>✏️</span>
-                          <span>{note ? `Note: "${note}"` : "Add special instruction"}</span>
+                          <span>{note ? `Note: "${note}"` : "Add instruction"}</span>
                         </button>
                       </div>
                     )}
@@ -1033,17 +1119,17 @@ export function TableOrderClient() {
                         id={`add-btn-${product.id}`}
                         onClick={() => handleAddToCart(product)}
                         style={{
-                          padding: "0.55rem 1.15rem",
+                          padding: isCompactMenu ? "0.42rem 0.85rem" : "0.55rem 1.15rem",
                           borderRadius: "var(--radius-full)",
                           backgroundColor: "var(--primary)",
                           color: "#ffffff",
                           fontWeight: 700,
-                          fontSize: "0.85rem",
+                          fontSize: isCompactMenu ? "0.8rem" : "0.85rem",
                           border: "none",
                           cursor: "pointer",
                           display: "flex",
                           alignItems: "center",
-                          gap: "0.35rem",
+                          gap: "0.3rem",
                           boxShadow: "0 2px 8px rgba(99, 102, 241, 0.35)",
                           transition: "transform var(--transition-fast)",
                         }}
@@ -1055,24 +1141,24 @@ export function TableOrderClient() {
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: "0.5rem",
+                          gap: isCompactMenu ? "0.35rem" : "0.5rem",
                           backgroundColor: "var(--bg-surface-elevated)",
                           borderRadius: "var(--radius-full)",
-                          padding: "0.25rem",
+                          padding: isCompactMenu ? "0.18rem" : "0.25rem",
                           border: "1px solid var(--border-glow)",
                         }}
                       >
                         <button
                           onClick={() => handleUpdateQuantity(product.id, -1)}
                           style={{
-                            width: "30px",
-                            height: "30px",
+                            width: isCompactMenu ? "26px" : "30px",
+                            height: isCompactMenu ? "26px" : "30px",
                             borderRadius: "50%",
                             border: "none",
                             backgroundColor: "rgba(255, 255, 255, 0.08)",
                             color: "var(--text-primary)",
                             fontWeight: 800,
-                            fontSize: "1rem",
+                            fontSize: isCompactMenu ? "0.85rem" : "1rem",
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
@@ -1083,10 +1169,10 @@ export function TableOrderClient() {
                         </button>
                         <span
                           style={{
-                            minWidth: "22px",
+                            minWidth: isCompactMenu ? "18px" : "22px",
                             textAlign: "center",
                             fontWeight: 800,
-                            fontSize: "0.95rem",
+                            fontSize: isCompactMenu ? "0.88rem" : "0.95rem",
                             color: "var(--primary)",
                           }}
                         >
@@ -1095,14 +1181,14 @@ export function TableOrderClient() {
                         <button
                           onClick={() => handleUpdateQuantity(product.id, 1)}
                           style={{
-                            width: "30px",
-                            height: "30px",
+                            width: isCompactMenu ? "26px" : "30px",
+                            height: isCompactMenu ? "26px" : "30px",
                             borderRadius: "50%",
                             border: "none",
                             backgroundColor: "var(--primary)",
                             color: "#ffffff",
                             fontWeight: 800,
-                            fontSize: "1rem",
+                            fontSize: isCompactMenu ? "0.85rem" : "1rem",
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
