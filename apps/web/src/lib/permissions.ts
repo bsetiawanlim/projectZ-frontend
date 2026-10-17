@@ -50,14 +50,24 @@ export const ALL_DASHBOARD_MODULES: DashboardModule[] = [
   },
   {
     id: "reports",
-    label: "Sales Reports",
+    label: "Reports & Analytics",
     shortLabel: "Reports",
-    href: "/pos/reports",
+    href: "/report",
     icon: "📊",
-    category: "Sales & Retail",
-    description: "Analyze daily sales performance, product revenue breakdown, and order totals.",
+    category: "Operations",
+    description: "Central reporting hub: sales performance, payroll compensation, equipment fleet, product stock levels, and facility opname.",
     isAuthorized: (u, can) =>
-      Boolean(u?.isSuperAdmin || can("pos", "report") || can("pos", "summary") || can("pos", "*") || can("sales-order", "*")),
+      Boolean(
+        u?.isSuperAdmin ||
+        can("pos", "report") ||
+        can("pos", "summary") ||
+        can("pos", "*") ||
+        can("sales-order", "*") ||
+        can("salary-record", "*") ||
+        can("payroll-period", "*") ||
+        can("equipment", "*") ||
+        can("product", "*")
+      ),
   },
   {
     id: "products",

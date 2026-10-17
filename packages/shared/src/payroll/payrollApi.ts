@@ -49,7 +49,15 @@ export function createPayrollApi(client: ApiClient) {
     },
 
     // Salary Records
-    async listSalaryRecords(query?: { employeeId?: number; limit?: number; page?: number }): Promise<Paginated<SalaryRecordItem>> {
+    async listSalaryRecords(query?: {
+      employeeId?: number;
+      facilityId?: number | string;
+      periodId?: number | string;
+      status?: string;
+      search?: string;
+      limit?: number;
+      page?: number;
+    }): Promise<Paginated<SalaryRecordItem>> {
       return client.list<SalaryRecordItem>("/api/salary-record/get-all", query);
     },
     async getSalaryRecord(id: number): Promise<ApiSuccess<{ salaryRecord: SalaryRecordItem }>> {

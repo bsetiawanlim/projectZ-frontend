@@ -86,6 +86,18 @@ export type {
   UpdateFacilityInput,
   CreateFacilitySectionInput,
   UpdateFacilitySectionInput,
+  FacilityEmployeeRecord,
+  CreateFacilityEmployeeInput,
+  UpdateFacilityEmployeeInput,
+  FacilityProductRecord,
+  CreateFacilityProductInput,
+  UpdateFacilityProductInput,
+  FacilityEquipmentRecord,
+  CreateFacilityEquipmentInput,
+  UpdateFacilityEquipmentInput,
+  FacilityTableRecord,
+  CreateFacilityTableInput,
+  UpdateFacilityTableInput,
 } from "@pz/shared";
 
 
